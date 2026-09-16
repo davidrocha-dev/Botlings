@@ -1,0 +1,146 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ---------- Design tokens ---------- */
+:root {
+  --bg: #ffffff;
+  --surface: #f6f6f8;
+  --surface-2: #eeeef2;
+  --elevated: #ffffff;
+  --border: rgb(15 15 30 / 0.08);
+  --border-strong: rgb(15 15 30 / 0.14);
+  --text: #111118;
+  --text-muted: #6b6b78;
+  --text-subtle: #9a9aa6;
+  --accent: #6d5dfc;
+  --accent-hover: #5d4cf0;
+  --accent-soft: rgb(109 93 252 / 0.12);
+  --accent-contrast: #ffffff;
+  --bubble-in: #eeeef2;
+  --bubble-in-text: #111118;
+  --success: #1fb877;
+  --warning: #f5a524;
+  --danger: #ef4056;
+  --glass: rgb(255 255 255 / 0.72);
+  --shadow-sm: 0 1px 2px rgb(15 15 30 / 0.06);
+  --shadow-md: 0 8px 24px -8px rgb(15 15 30 / 0.16), 0 2px 6px rgb(15 15 30 / 0.05);
+  --shadow-lg: 0 24px 64px -16px rgb(15 15 30 / 0.28);
+  color-scheme: light;
+}
+
+[data-theme="dark"] {
+  --bg: #0b0b10;
+  --surface: #121219;
+  --surface-2: #1a1a23;
+  --elevated: #17171f;
+  --border: rgb(255 255 255 / 0.07);
+  --border-strong: rgb(255 255 255 / 0.13);
+  --text: #f2f2f7;
+  --text-muted: #9d9dab;
+  --text-subtle: #6c6c7a;
+  --accent: #7f71ff;
+  --accent-hover: #9083ff;
+  --accent-soft: rgb(127 113 255 / 0.16);
+  --accent-contrast: #ffffff;
+  --bubble-in: #1f1f29;
+  --bubble-in-text: #f2f2f7;
+  --glass: rgb(18 18 25 / 0.72);
+  --shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4);
+  --shadow-md: 0 8px 24px -8px rgb(0 0 0 / 0.6);
+  --shadow-lg: 0 24px 64px -16px rgb(0 0 0 / 0.8);
+  color-scheme: dark;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-elevated: var(--elevated);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-muted: var(--text-muted);
+  --color-subtle: var(--text-subtle);
+  --color-accent: var(--accent);
+  --color-accent-hover: var(--accent-hover);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-contrast: var(--accent-contrast);
+  --color-bubble-in: var(--bubble-in);
+  --color-bubble-in-text: var(--bubble-in-text);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-glass: var(--glass);
+  --shadow-soft: var(--shadow-sm);
+  --shadow-float: var(--shadow-md);
+  --shadow-modal: var(--shadow-lg);
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+/* ---------- Base ---------- */
+html,
+body {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  overscroll-behavior: none;
+}
+
+::selection {
+  background: var(--accent-soft);
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+
+.glass {
+  background: var(--glass);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+}
+
+.pt-safe {
+  padding-top: env(safe-area-inset-top);
+}
+.pb-safe {
+  padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ---------- Botling avatar ---------- */
+@keyframes botling-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  95% { transform: scaleY(0.1); }
+}
+@keyframes botling-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-2px); }
+}
+.botling-eye {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+.botling-animated .botling-eye {
+  animation: botling-blink 4.5s infinite;
+}
+.botling-animated .botling-eye-r {
+  animation-delay: 0.04s;
+}
+.botling-animated .botling-body {
+  animation: botling-float 3.2s ease-in-out infinite;
+}
