@@ -86,6 +86,10 @@ export const conversations = pgTable(
     title: text("title"),
     pinned: boolean("pinned").notNull().default(false),
     lastReadAt: timestamp("last_read_at", { withTimezone: true }).notNull().defaultNow(),
+    /** Rolling summary of messages that fell out of the model's history window. */
+    summary: text("summary").notNull().default(""),
+    /** Messages created at or before this instant are covered by `summary`. */
+    summaryUntil: timestamp("summary_until", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [index("conversations_owner_idx").on(t.ownerId)],
@@ -146,7 +150,7 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     authorType: text("author_type", { enum: ["user", "agent"] }).notNull(),
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
-    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal", "approval"] })
+    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal", "approval", "memory"] })
       .notNull()
       .default("text"),
     content: text("content").notNull(),
@@ -262,6 +266,21 @@ export const approvalRules = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.agentId, t.category] })],
+);
+
+/** Durable facts an agent keeps across conversations; visible and editable by the owner. */
+export const agentMemories = pgTable(
+  "agent_memories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    source: text("source", { enum: ["agent", "user"] }).notNull(),
+    ...timestamps,
+  },
+  (t) => [index("agent_memories_agent_idx").on(t.agentId)],
 );
 
 /**

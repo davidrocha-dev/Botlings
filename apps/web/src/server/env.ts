@@ -34,7 +34,9 @@ const schema = z.object({
   BOTLINGS_MODE: z.enum(["personal", "commercial"]).default("personal"),
   BOTLINGS_DEFAULT_MODEL: z.string().default("google/gemma-4-31b-it:free"),
   /** Free model(s) for small helper jobs ("Generate with AI"); comma-separated, tried in order. */
-  BOTLINGS_UTILITY_MODEL: z.string().default("google/gemma-4-31b-it:free,openrouter/free"),
+  BOTLINGS_UTILITY_MODEL: z
+    .string()
+    .default("google/gemma-4-31b-it:free,z-ai/glm-5.2:free,nvidia/nemotron-3-super-120b-a12b:free,openrouter/free"),
   BOTLINGS_LICENSE_PUBLIC_KEY: z.string().optional(),
   /** base64 32-byte key for encrypting secrets; generated into data/secret.key when unset. */
   BOTLINGS_SECRET_KEY: z.string().optional(),

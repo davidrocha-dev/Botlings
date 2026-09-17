@@ -3,7 +3,7 @@
 import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Cpu, FileText, Globe, Loader2, MousePointerClick, SquareTerminal } from "lucide-react";
+import { AlertTriangle, Brain, Cpu, FileText, Globe, Loader2, MousePointerClick, SquareTerminal } from "lucide-react";
 import { BotlingAvatar } from "@/components/avatar/botling-avatar";
 import { useI18n } from "@/lib/i18n/client";
 import { formatMessageTime } from "@/lib/format";
@@ -98,6 +98,27 @@ function ToolRow({ message }: { message: Message }) {
   );
 }
 
+function MemoryRow({ message }: { message: Message }) {
+  const { t } = useI18n();
+  const forgot = message.metadata?.tool === "forget";
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: -6 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="my-1 ml-9 flex max-w-[85%] items-start gap-2 text-xs text-muted"
+    >
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+        <Brain className="size-3.5" />
+      </span>
+      <span className="pt-1">
+        <span className="font-medium">{forgot ? t.memory.forgot : t.memory.remembered}</span>{" "}
+        <span className={cn(forgot && "line-through")}>{message.text}</span>
+      </span>
+    </motion.div>
+  );
+}
+
 function ErrorRow({ message }: { message: Message }) {
   const { t } = useI18n();
   return (
@@ -169,6 +190,7 @@ export function MessageList({ conversation }: { conversation: Conversation }) {
             if (message.kind === "task") return <TaskCard key={message.id} message={message} />;
             if (message.kind === "proposal") return <ProposalCard key={message.id} message={message} />;
             if (message.kind === "approval") return <ApprovalCard key={message.id} message={message} />;
+            if (message.kind === "memory") return <MemoryRow key={message.id} message={message} />;
 
             const prev = list[index - 1];
             const next = list[index + 1];

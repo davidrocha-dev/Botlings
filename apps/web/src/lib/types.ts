@@ -30,7 +30,7 @@ export type Message = {
   author: MessageAuthor;
   text: string;
   createdAt: number;
-  kind: "text" | "event" | "error" | "tool" | "task" | "proposal" | "approval";
+  kind: "text" | "event" | "error" | "tool" | "task" | "proposal" | "approval" | "memory";
   model?: string | null;
   costUsd?: number | null;
   metadata?: {

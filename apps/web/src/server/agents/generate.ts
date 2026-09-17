@@ -1,6 +1,5 @@
 import { z } from "zod";
-import { env } from "@/server/env";
-import { OpenRouterError, streamChat } from "@/server/openrouter";
+import { completeWithUtilityModel } from "@/server/utility-model";
 
 const draftSchema = z.object({
   name: z.string().trim().min(1).transform((v) => v.slice(0, 32)),
@@ -17,43 +16,25 @@ Write role and prompt in the same language as the description. No markdown, no c
 
 export type AgentDraft = z.infer<typeof draftSchema>;
 
-/** Asks the utility model for a draft agent. Returns null when the model output isn't usable. */
-async function draftWith(model: string, description: string): Promise<{ draft: AgentDraft } | { error: string }> {
-  let text = "";
-  try {
-    for await (const event of streamChat({
-      model,
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: description },
-      ],
-      signal: AbortSignal.timeout(30_000),
-    })) {
-      if (event.type === "delta") text += event.text;
-    }
-  } catch (error) {
-    return { error: error instanceof OpenRouterError ? error.message : "generation_failed" };
-  }
-
+function parseDraft(text: string): AgentDraft | null {
   const json = text.match(/\{[\s\S]*\}/)?.[0];
   try {
     const result = draftSchema.safeParse(json ? JSON.parse(json) : null);
-    if (result.success) return { draft: result.data };
-  } catch {}
-  return { error: "generation_failed" };
+    return result.success ? result.data : null;
+  } catch {
+    return null;
+  }
 }
 
-/**
- * Asks the utility model(s) for a draft agent. BOTLINGS_UTILITY_MODEL may list several models
- * (comma-separated, e.g. free ones that are often rate-limited); they are tried in order.
- */
+/** Asks the utility model(s) for a draft agent (name, role, instructions). */
 export async function generateAgentDraft(description: string): Promise<{ draft: AgentDraft } | { error: string }> {
-  const models = env.BOTLINGS_UTILITY_MODEL.split(",").map((m) => m.trim()).filter(Boolean);
-  let last: { error: string } = { error: "generation_failed" };
-  for (const model of models) {
-    const result = await draftWith(model, description);
-    if ("draft" in result) return result;
-    last = result;
-  }
-  return last;
+  const result = await completeWithUtilityModel(
+    [
+      { role: "system", content: SYSTEM },
+      { role: "user", content: description },
+    ],
+    { accept: (text) => parseDraft(text) !== null },
+  );
+  if ("error" in result) return result;
+  return { draft: parseDraft(result.text)! };
 }

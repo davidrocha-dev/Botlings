@@ -17,6 +17,7 @@ import { classifyAction, type ElementInfo } from "@/server/approvals/classify";
 import { secretNamesForAgent } from "@/server/secrets/secrets";
 import { BudgetExceededError, assertWithinBudget } from "@/server/usage/usage";
 import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
+import { MEMORY_TOOLS, MEMORY_TOOL_NAMES, executeMemoryTool, listMemories, memorySection, updateConversationSummary, type MemoryRow } from "./memory";
 import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
 import type { ChatStreamEvent } from "@/lib/types";
 
@@ -146,6 +147,9 @@ function systemPrompt(opts: {
   team: TeamMember[];
   canDelegate: boolean;
   canPropose: boolean;
+  canRemember: boolean;
+  memories: MemoryRow[];
+  conversationSummary: string;
   delegatedBy?: string;
 }) {
   const { agent, mode } = opts;
@@ -160,6 +164,11 @@ function systemPrompt(opts: {
     opts.canDelegate && DELEGATION_GUIDE,
     opts.canPropose && !agent.prompt.trim() && "Your saved instructions are currently empty.",
     opts.canPropose && PROPOSAL_GUIDE,
+    opts.canRemember
+      ? memorySection(opts.memories)
+      : opts.memories.length > 0 && ["What you remember:", ...opts.memories.map((m) => `- ${m.content}`)].join("\n"),
+    opts.conversationSummary && `Summary of earlier parts of this conversation (older messages are not shown):
+${opts.conversationSummary}`,
     mode === "delegated" &&
       `You are working on a task delegated to you by ${opts.delegatedBy ?? "the orchestrator"} (the message prefixed with their name). Do the work with your tools, then reply with a concise report of what you did and the result. You cannot delegate work to others.`,
     mode === "summary" &&
@@ -303,6 +312,12 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
   const canDelegate = supportsTools && mode === "chat" && agent.isOrchestrator && !!opts.onDelegate && team.length > 0;
   // Preferences come from talking with the user, so proposals are only offered in chat mode.
   const canPropose = supportsTools && mode === "chat";
+  const canRemember = supportsTools && mode !== "summary";
+  const memories = await listMemories(agent.id);
+  const [conversationRow] = await db
+    .select({ summary: schema.conversations.summary })
+    .from(schema.conversations)
+    .where(eq(schema.conversations.id, conversationId));
 
   const tools = supportsTools
     ? [
@@ -310,6 +325,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         ...(computerReady ? COMPUTER_TOOLS : []),
         ...(canDelegate ? [delegateTool(team.map((m) => m.name))] : []),
         ...(canPropose ? [PROPOSE_INSTRUCTIONS_TOOL] : []),
+        ...(canRemember ? MEMORY_TOOLS : []),
       ]
     : [];
 
@@ -326,6 +342,9 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         team,
         canDelegate,
         canPropose,
+        canRemember,
+        memories,
+        conversationSummary: conversationRow?.summary ?? "",
         delegatedBy: opts.delegatedBy,
       }),
     },
@@ -418,6 +437,10 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
               ? `Model changed to ${change.model.id}. Confirm this briefly to the user.`
               : `Failed: ${change.reason} Tell the user and suggest they check the ID.`;
           }
+        } else if (MEMORY_TOOL_NAMES.has(call.function.name) && canRemember) {
+          const memory = await executeMemoryTool(agent, conversationId, call.function.name, args, memories);
+          if (memory.message) emit({ type: "message", message: memory.message });
+          result = memory.result;
         } else if (call.function.name === "propose_instructions_update" && canPropose) {
           const proposal = await createProposal(agent, conversationId, args);
           for (const stale of proposal.staleCards ?? []) emit({ type: "message", message: stale });
@@ -460,6 +483,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
       });
     }
     await recordUsage(agent, modelUsed, usage);
+    void updateConversationSummary(conversationId, HISTORY_LIMIT, conversation.names).catch(() => {});
     const [fresh] = await db.select().from(schema.agents).where(eq(schema.agents.id, agent.id));
     if (fresh) emit({ type: "agent", agent: await getAgentDto(fresh) });
     return { content: fullContent.trim(), costUsd: usage.cost ?? 0 };
@@ -494,6 +518,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
       }),
     });
     await recordUsage(agent, modelUsed, usage);
+    void updateConversationSummary(conversationId, HISTORY_LIMIT, conversation.names).catch(() => {});
     return { content: fullContent.trim(), costUsd: usage.cost ?? 0, error: reason };
   }
 }

@@ -72,6 +72,8 @@ export function Sidebar() {
               : last
                 ? last.kind === "event"
                   ? `${t.chat.modelChanged}: ${last.metadata?.toModel ?? ""}`
+                  : last.kind === "memory"
+                  ? `${t.memory.remembered} ${last.text}`
                   : last.kind === "approval"
                   ? `${t.approvals.status[last.metadata?.approvalStatus ?? "pending"]}: ${last.text}`
                   : last.kind === "proposal"

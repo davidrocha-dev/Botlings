@@ -50,6 +50,13 @@
       "when": 1789658095933,
       "tag": "0006_budgets_usage_ledger",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1789658559194,
+      "tag": "0007_memories",
+      "breakpoints": true
     }
   ]
 }

@@ -4,7 +4,8 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { Coins, Cpu, FolderOpen, Pencil, Trash2, Wallet, X } from "lucide-react";
+import { Brain, Coins, Cpu, FolderOpen, Pencil, Trash2, Wallet, X } from "lucide-react";
+import { MemoryDialog } from "./memory-dialog";
 import { WorkspaceDialog } from "./workspace-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModelPicker } from "@/components/agents/model-picker";
@@ -37,6 +38,7 @@ function AgentDetails({ agent }: { agent: Agent }) {
   const router = useRouter();
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [memoryOpen, setMemoryOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
 
@@ -114,6 +116,16 @@ function AgentDetails({ agent }: { agent: Agent }) {
         </h3>
         <ModelPicker value={agent.model} onChange={changeModel} />
       </section>
+
+      <button
+        type="button"
+        onClick={() => setMemoryOpen(true)}
+        className="inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl border border-border-strong text-sm font-medium transition-colors hover:bg-surface"
+      >
+        <Brain className="size-4 text-accent" />
+        {t.memory.open}
+      </button>
+      <MemoryDialog agent={agent} open={memoryOpen} onClose={() => setMemoryOpen(false)} />
 
       <div className="grid grid-cols-2 gap-2">
         <Stat icon={<Wallet className="size-3.5" />} label={t.info.spendToday} value={formatUsd(agent.spendTodayUsd)} />
