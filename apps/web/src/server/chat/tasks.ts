@@ -4,6 +4,7 @@ import { toMessageDto } from "@/server/data";
 import { publish } from "@/server/events";
 import { TASK_LIMITS, runAgentTurn, saveMessage, type AgentRow, type Emit } from "./agent-turn";
 import type { TaskStatus } from "@/server/db/schema";
+import { notify } from "@/server/notifications/notify";
 
 /**
  * Delegation: the orchestrator hands work to another agent, which runs in the background in its
@@ -155,7 +156,7 @@ async function maybeSummarize(requestId: string) {
     .join("\n\n");
 
   const conversationId = first.orchestratorConversationId;
-  await runAgentTurn({
+  const result = await runAgentTurn({
     agent: orchestrator,
     conversation: { id: conversationId, type: "direct", names: await conversationNames(conversationId) },
     emit: (event) => publish(first.ownerId, conversationId, event),
@@ -163,6 +164,9 @@ async function maybeSummarize(requestId: string) {
     mode: "summary",
     extraMessages: [{ role: "user", content: `[Delegated task results]\n\n${report}` }],
   });
+  if (!result.error && result.content) {
+    await notify(first.ownerId, { type: "reply", agentName: orchestrator.name, text: result.content, conversationId });
+  }
 }
 
 /**

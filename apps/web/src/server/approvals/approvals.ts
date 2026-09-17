@@ -4,6 +4,7 @@ import { toMessageDto } from "@/server/data";
 import { publish } from "@/server/events";
 import type { ApprovalStatus } from "@/server/db/schema";
 import type { ChatStreamEvent, Message } from "@/lib/types";
+import { notify } from "@/server/notifications/notify";
 
 const APPROVAL_TIMEOUT_MS = 15 * 60_000;
 
@@ -85,6 +86,19 @@ export async function requestApproval(opts: {
     .returning();
   await db.update(schema.approvals).set({ cardMessageId: card.id }).where(eq(schema.approvals.id, approval.id));
   opts.emit({ type: "message", message: toMessageDto(card) });
+  void db
+    .select({ name: schema.agents.name })
+    .from(schema.agents)
+    .where(eq(schema.agents.id, opts.agentId))
+    .then(([agent]) =>
+      notify(opts.ownerId, {
+        type: "approval",
+        agentName: agent?.name ?? "Botling",
+        detail: opts.detail,
+        conversationId: opts.conversationId,
+        approvalId: approval.id,
+      }),
+    );
 
   const decision = await new Promise<Exclude<ApprovalStatus, "pending">>((resolve) => {
     const finish: Waiter = (status) => {

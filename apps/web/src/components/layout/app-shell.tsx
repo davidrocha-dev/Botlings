@@ -1,6 +1,7 @@
 "use client";
 
 import { usePathname } from "next/navigation";
+import { PresenceReporter } from "@/components/pwa/presence";
 import { Sidebar } from "./sidebar";
 import { cn } from "@/lib/cn";
 
@@ -14,6 +15,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-dvh overflow-hidden bg-bg">
+      <PresenceReporter />
       <aside
         className={cn(
           "h-full w-full shrink-0 border-border bg-bg md:w-[320px] md:border-r lg:w-[360px]",

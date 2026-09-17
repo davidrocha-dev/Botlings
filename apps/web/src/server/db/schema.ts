@@ -28,8 +28,15 @@ export const users = pgTable("users", {
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role", { enum: ["owner", "admin", "member"] }).notNull().default("member"),
+  /** Which events notify the user outside the app (Web Push, Telegram). */
+  notificationPrefs: jsonb("notification_prefs")
+    .$type<NotificationPrefs>()
+    .notNull()
+    .default({ approvals: true, routines: true, replies: true }),
   ...timestamps,
 });
+
+export type NotificationPrefs = { approvals: boolean; routines: boolean; replies: boolean };
 
 export const sessions = pgTable(
   "sessions",
@@ -325,6 +332,26 @@ export const routineRuns = pgTable(
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },
   (t) => [index("routine_runs_routine_idx").on(t.routineId, t.startedAt)],
+);
+
+/** Browser push subscriptions (one per device/browser). */
+export const pushSubscriptions = pgTable(
+  "push_subscriptions",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    userId: uuid("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    endpoint: text("endpoint").notNull(),
+    p256dh: text("p256dh").notNull(),
+    auth: text("auth").notNull(),
+    userAgent: text("user_agent"),
+    /** UI language when subscribed, so notification text matches it. */
+    locale: text("locale").notNull().default("en"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    lastSuccessAt: timestamp("last_success_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("push_subscriptions_endpoint_idx").on(t.endpoint), index("push_subscriptions_user_idx").on(t.userId)],
 );
 
 /** Durable facts an agent keeps across conversations; visible and editable by the owner. */

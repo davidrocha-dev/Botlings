@@ -40,6 +40,11 @@ const schema = z.object({
   BOTLINGS_LICENSE_PUBLIC_KEY: z.string().optional(),
   /** base64 32-byte key for encrypting secrets; generated into data/secret.key when unset. */
   BOTLINGS_SECRET_KEY: z.string().optional(),
+  /** Web Push keys; generated into data/vapid.json when unset. */
+  BOTLINGS_VAPID_PUBLIC_KEY: z.string().optional(),
+  BOTLINGS_VAPID_PRIVATE_KEY: z.string().optional(),
+  /** Contact for push services (mailto: or https:). */
+  BOTLINGS_VAPID_SUBJECT: z.string().default("mailto:botlings@example.com"),
   BOTLINGS_AGENT_IMAGE: z.string().default("botlings-agent:latest"),
   BOTLINGS_MAX_ACTIVE_COMPUTERS: z.coerce.number().int().min(1).default(4),
   BOTLINGS_COMPUTER_MEMORY_MB: z.coerce.number().int().min(512).default(1536),

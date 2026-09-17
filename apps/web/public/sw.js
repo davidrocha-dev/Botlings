@@ -1,9 +1,11 @@
 // Botlings service worker — app shell caching + push notifications.
 const CACHE = "botlings-shell-v1";
 const OFFLINE_URLS = ["/"];
+// Registered as /sw.js?dev=1 in development: push only, no caching.
+const DEV = new URL(self.location.href).searchParams.has("dev");
 
 self.addEventListener("install", (event) => {
-  event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(OFFLINE_URLS)));
+  if (!DEV) event.waitUntil(caches.open(CACHE).then((cache) => cache.addAll(OFFLINE_URLS)));
   self.skipWaiting();
 });
 
@@ -17,6 +19,7 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
+  if (DEV) return;
   const { request } = event;
   if (request.method !== "GET" || new URL(request.url).origin !== self.location.origin) return;
 
@@ -44,12 +47,19 @@ self.addEventListener("fetch", (event) => {
 
 self.addEventListener("push", (event) => {
   if (!event.data) return;
-  const data = event.data.json();
+  let data;
+  try {
+    data = event.data.json();
+  } catch {
+    data = { body: event.data.text() };
+  }
   event.waitUntil(
     self.registration.showNotification(data.title || "Botlings", {
       body: data.body,
       icon: "/pwa-icon/192",
       badge: "/pwa-icon/192",
+      tag: data.tag,
+      renotify: Boolean(data.tag),
       data: { url: data.url || "/" },
     }),
   );
@@ -57,5 +67,12 @@ self.addEventListener("push", (event) => {
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
-  event.waitUntil(self.clients.openWindow(event.notification.data?.url || "/"));
+  const url = new URL(event.notification.data?.url || "/", self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((windows) => {
+      const open = windows.find((client) => new URL(client.url).origin === self.location.origin);
+      if (open) return open.focus().then((client) => client.navigate(url)).catch(() => self.clients.openWindow(url));
+      return self.clients.openWindow(url);
+    }),
+  );
 });

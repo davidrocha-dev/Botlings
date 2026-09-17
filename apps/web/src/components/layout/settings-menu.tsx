@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { AlarmClock, KeyRound, Languages, LogOut, Monitor, Moon, Settings, Sun, Wallet } from "lucide-react";
+import { AlarmClock, Bell, KeyRound, Languages, LogOut, Monitor, Moon, Settings, Sun, Wallet } from "lucide-react";
 import { logout } from "@/app/(auth)/login/actions";
 import { useStore } from "@/lib/store";
 import { IconButton } from "@/components/ui/icon-button";
@@ -109,6 +109,14 @@ export function SettingsMenu() {
               >
                 <AlarmClock className="size-4 text-muted" />
                 {t.nav.routines}
+              </Link>
+              <Link
+                href="/settings/notifications"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-xl px-2 py-2 text-sm hover:bg-surface"
+              >
+                <Bell className="size-4 text-muted" />
+                {t.nav.notifications}
               </Link>
               <Link
                 href="/settings/secrets"

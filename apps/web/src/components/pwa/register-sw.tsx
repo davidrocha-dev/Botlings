@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect } from "react";
+import { registerServiceWorker } from "@/lib/push";
 
 export function RegisterServiceWorker() {
   useEffect(() => {
-    if (process.env.NODE_ENV !== "production" || !("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js", { scope: "/", updateViaCache: "none" }).catch(() => {});
+    registerServiceWorker().catch(() => {});
   }, []);
   return null;
 }

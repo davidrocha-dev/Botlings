@@ -3,6 +3,7 @@ import { db, schema } from "@/server/db";
 import { getOwnedConversation } from "@/server/data";
 import { changeModel, runAgentTurn, saveMessage, type AgentRow, type Emit } from "./agent-turn";
 import { beginRequest, createDelegator } from "./tasks";
+import { notify } from "@/server/notifications/notify";
 
 /** Picks who answers: an @mentioned member, else the orchestrator, else the first member. */
 function pickResponder(text: string, members: AgentRow[]) {
@@ -50,7 +51,7 @@ export async function handleUserMessage(options: {
   const requestId = crypto.randomUUID();
   const endRequest = agent.isOrchestrator ? beginRequest(requestId) : null;
   try {
-    await runAgentTurn({
+    const result = await runAgentTurn({
       agent,
       conversation: { id: conversationId, type: conversation.type, names },
       emit,
@@ -59,6 +60,9 @@ export async function handleUserMessage(options: {
       userText: text,
       onDelegate: agent.isOrchestrator ? createDelegator({ orchestrator: agent, conversationId, requestId, emit }) : undefined,
     });
+    if (!result.error && result.content) {
+      void notify(userId, { type: "reply", agentName: agent.name, text: result.content, conversationId });
+    }
   } finally {
     await endRequest?.();
   }
