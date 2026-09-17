@@ -99,6 +99,14 @@ export const conversations = pgTable(
     summaryUntil: timestamp("summary_until", { withTimezone: true }),
     /** Set by /new: older messages are kept but no longer sent to the model. */
     contextStartedAt: timestamp("context_started_at", { withTimezone: true }),
+    /** Groups: what the group is for (shown to its agents and the moderator). */
+    description: text("description").notNull().default(""),
+    /** Groups: "discussion" lets the moderator pass the word between agents; "mentions" gets one reply. */
+    discussionMode: text("discussion_mode", { enum: ["discussion", "mentions"] }).notNull().default("discussion"),
+    /** Groups: most agent replies per user message. */
+    maxTurns: integer("max_turns").notNull().default(6),
+    /** Groups: most spend per user message, in USD. */
+    maxCostUsd: numeric("max_cost_usd", { precision: 10, scale: 4, mode: "number" }).notNull().default(0.05),
     ...timestamps,
   },
   (t) => [index("conversations_owner_idx").on(t.ownerId)],
@@ -151,6 +159,10 @@ export type MessageMetadata = {
   routineRunStatus?: "running" | "completed" | "failed";
   routineSuggestion?: "pending" | "enabled" | "discarded";
   routineCron?: string;
+  /** Group events (kind "event"): members joining/leaving, a discussion pausing at its limit. */
+  memberEvent?: "joined" | "left";
+  memberAgentId?: string;
+  discussionStop?: "turns" | "cost";
   /** Slash command replies (kind "command"). */
   command?: string;
   pendingApprovals?: { id: string; agentName: string; detail: string }[];

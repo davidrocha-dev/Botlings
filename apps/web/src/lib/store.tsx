@@ -29,6 +29,9 @@ type StoreValue = {
   applyMessage: (message: Message) => void;
   /** Drops a deleted agent, its removed conversations, and its group memberships. */
   removeAgent: (agentId: string, removedConversationIds: string[]) => void;
+  /** Adds or replaces a conversation (keeps its unread count and last message if newer). */
+  upsertConversation: (conversation: Conversation) => void;
+  removeConversation: (conversationId: string) => void;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -233,6 +236,25 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
     });
   }, []);
 
+  const upsertConversation = useCallback((conversation: Conversation) => {
+    setConversations((list) => {
+      const current = list.find((c) => c.id === conversation.id);
+      if (!current) return [conversation, ...list];
+      const lastMessage =
+        (current.lastMessage?.createdAt ?? 0) > (conversation.lastMessage?.createdAt ?? 0) ? current.lastMessage : conversation.lastMessage;
+      return list.map((c) => (c.id === conversation.id ? { ...conversation, unread: current.unread, lastMessage } : c));
+    });
+  }, []);
+
+  const removeConversation = useCallback((conversationId: string) => {
+    setConversations((list) => list.filter((c) => c.id !== conversationId));
+    setMessages((map) => {
+      const next = { ...map };
+      delete next[conversationId];
+      return next;
+    });
+  }, []);
+
   const addAgent = useCallback(
     (agent: Agent, conversation: Conversation) => {
       upsertAgent(agent);
@@ -260,6 +282,8 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       addAgent,
       upsertAgent,
       removeAgent,
+      upsertConversation,
+      removeConversation,
       applyMessage: appendMessage,
     }),
     [
@@ -279,6 +303,8 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       addAgent,
       upsertAgent,
       removeAgent,
+      upsertConversation,
+      removeConversation,
       appendMessage,
     ],
   );

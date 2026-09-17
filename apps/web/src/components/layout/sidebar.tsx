@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { Pin, Plus, Search } from "lucide-react";
+import { Pin, Plus, Search, UsersRound } from "lucide-react";
 import { ConversationAvatar } from "@/components/avatar/conversation-avatar";
 import { SettingsMenu } from "./settings-menu";
 import { useI18n } from "@/lib/i18n/client";
@@ -44,6 +44,14 @@ export function Sidebar() {
           <div className="flex items-center gap-1">
             <SettingsMenu />
             <Link
+              href="/groups/new"
+              aria-label={t.nav.newGroup}
+              title={t.nav.newGroup}
+              className="inline-flex size-9 items-center justify-center rounded-full text-muted transition-colors hover:bg-surface-2 hover:text-text"
+            >
+              <UsersRound className="size-[18px]" />
+            </Link>
+            <Link
               href="/agents/new"
               aria-label={t.nav.newAgent}
               className="inline-flex size-9 items-center justify-center rounded-full bg-accent text-accent-contrast shadow-soft transition-all hover:bg-accent-hover active:scale-95"
@@ -72,7 +80,11 @@ export function Sidebar() {
               ? f(t.chat.typing, { name: typingAgent.name }) + "…"
               : last
                 ? last.kind === "event"
-                  ? `${t.chat.modelChanged}: ${last.metadata?.toModel ?? ""}`
+                  ? last.metadata?.memberEvent
+                    ? f(last.metadata.memberEvent === "joined" ? t.groups.joined : t.groups.left, { name: getAgent(last.metadata.memberAgentId ?? "")?.name ?? "Botling" })
+                    : last.metadata?.discussionStop
+                      ? last.metadata.discussionStop === "turns" ? t.groups.pausedTurns : t.groups.pausedCost
+                      : `${t.chat.modelChanged}: ${last.metadata?.toModel ?? ""}`
                   : last.kind === "routine"
                   ? `⏰ ${last.metadata?.routineName ?? ""}`
                   : last.kind === "memory"

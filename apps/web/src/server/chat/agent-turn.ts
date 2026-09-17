@@ -43,6 +43,10 @@ export type TurnConversation = {
   type: "direct" | "group";
   /** Names by agent id, for labelling other agents' messages in the history. */
   names: Map<string, string>;
+  /** Groups: what the group is for. */
+  description?: string;
+  /** Groups: a moderated discussion where agents take turns. */
+  discussion?: boolean;
 };
 
 export type TurnOptions = {
@@ -151,6 +155,8 @@ function systemPrompt(opts: {
   mode: TurnMode;
   conversationType: "direct" | "group";
   memberNames: string[];
+  groupDescription?: string;
+  discussion?: boolean;
   hasComputer: boolean;
   secrets: { name: string; description: string }[];
   team: TeamMember[];
@@ -189,7 +195,14 @@ ${opts.conversationSummary}`,
     mode === "summary" &&
       "Delegated tasks you started have finished (details below). Give the user a short, clear summary of the results and anything that still needs their attention. Do not delegate again.",
     opts.conversationType === "group" &&
-      `You are in a group chat with the user and these Botlings: ${opts.memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets. Only speak for yourself.`,
+      [
+        `You are in a group chat with the user and these Botlings: ${opts.memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets. Only speak for yourself; never write lines for the others.`,
+        opts.groupDescription && `What this group is for: ${opts.groupDescription}`,
+        opts.discussion &&
+          "This is a moderated discussion: a moderator gives the floor to one Botling at a time. When it is your turn, add something new from your own expertise in a few sentences — build on, question or correct what the others said (address them by name), and don't repeat points already made. If the question is settled, say so briefly.",
+      ]
+        .filter(Boolean)
+        .join("\n"),
     opts.hasComputer &&
       "You have your own Linux computer with a terminal, files (~/workspace) and a Chromium browser the user can watch live. Use your tools to actually do tasks instead of describing them. Briefly tell the user what you are about to do, then do it. Never enter passwords or payment details; ask the user to take control of the screen for logins.",
     opts.hasComputer && SAFETY_GUIDE,
@@ -352,6 +365,8 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         mode,
         conversationType: conversation.type,
         memberNames: [...conversation.names.values()],
+        groupDescription: conversation.description,
+        discussion: conversation.discussion,
         hasComputer: computerReady,
         secrets: computerReady ? await secretNamesForAgent(agent.id) : [],
         team,

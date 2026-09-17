@@ -6,6 +6,7 @@ import { parseCommand, runCommand } from "./commands";
 import { trackGeneration } from "./generations";
 import { beginRequest, createDelegator } from "./tasks";
 import { notify } from "@/server/notifications/notify";
+import { runGroupRound } from "@/server/groups/discussion";
 
 /** Picks who answers: an @mentioned member, else the orchestrator, else the first member. */
 function pickResponder(text: string, members: AgentRow[]) {
@@ -74,6 +75,20 @@ export async function handleUserMessage(options: {
   if (signal.aborted) onAbort();
   else signal.addEventListener("abort", onAbort, { once: true });
   const untrack = trackGeneration(conversationId, controller);
+
+  if (conversation.type === "group") {
+    try {
+      const result = await runGroupRound({ userId, group: conversation, members, names, text, emit, signal: controller.signal });
+      const author = result && members.find((m) => m.id === result.agentId);
+      if (result && author && !result.error && result.finalContent) {
+        void notify(userId, { type: "reply", agentName: author.name, text: result.finalContent, conversationId });
+      }
+    } finally {
+      untrack();
+      signal.removeEventListener("abort", onAbort);
+    }
+    return;
+  }
 
   const requestId = crypto.randomUUID();
   const endRequest = agent.isOrchestrator ? beginRequest(requestId) : null;

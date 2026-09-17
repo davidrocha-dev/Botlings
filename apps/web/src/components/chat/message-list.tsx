@@ -51,7 +51,21 @@ function TypingBubble({ agentId }: { agentId: string }) {
 }
 
 function EventRow({ message }: { message: Message }) {
-  const { t } = useI18n();
+  const { t, f } = useI18n();
+  const { getAgent } = useStore();
+  const meta = message.metadata;
+  if (meta?.memberEvent || meta?.discussionStop) {
+    const text = meta.memberEvent
+      ? f(meta.memberEvent === "joined" ? t.groups.joined : t.groups.left, { name: getAgent(meta.memberAgentId ?? "")?.name ?? "Botling" })
+      : meta.discussionStop === "turns"
+        ? t.groups.pausedTurns
+        : t.groups.pausedCost;
+    return (
+      <motion.div layout initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="my-3 flex justify-center px-6 text-center">
+        <span className="rounded-full bg-surface px-3 py-1 text-xs text-muted">{text}</span>
+      </motion.div>
+    );
+  }
   return (
     <motion.div
       layout

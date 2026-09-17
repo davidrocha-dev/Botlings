@@ -10,11 +10,11 @@ import { WorkspaceDialog } from "./workspace-dialog";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModelPicker } from "@/components/agents/model-picker";
 import { BotlingAvatar } from "@/components/avatar/botling-avatar";
-import { ConversationAvatar } from "@/components/avatar/conversation-avatar";
 import { moodForStatus } from "@/components/avatar/botling-options";
 import { IconButton } from "@/components/ui/icon-button";
 import { StatusDot } from "@/components/ui/status-dot";
 import { VmPreview } from "./vm-preview";
+import { GroupDetails } from "@/components/groups/group-details";
 import { useI18n } from "@/lib/i18n/client";
 import { formatUsd } from "@/lib/format";
 import { useStore } from "@/lib/store";
@@ -167,44 +167,6 @@ function AgentDetails({ agent }: { agent: Agent }) {
         onConfirm={remove}
         onCancel={() => setConfirmOpen(false)}
       />
-    </div>
-  );
-}
-
-function GroupDetails({ conversation }: { conversation: Conversation }) {
-  const { t, f } = useI18n();
-  const { getAgent } = useStore();
-  const members = conversation.memberIds.map(getAgent).filter((a) => a !== undefined);
-  return (
-    <div className="space-y-5">
-      <div className="flex flex-col items-center text-center">
-        <ConversationAvatar conversation={conversation} size={96} />
-        <h2 className="mt-3 text-xl font-semibold tracking-tight">{conversation.title}</h2>
-        <p className="mt-1 text-sm text-muted">{f(t.chat.members, { count: members.length })}</p>
-      </div>
-      <section className="space-y-2">
-        <h3 className="text-[11px] font-semibold tracking-wide text-subtle uppercase">{t.info.members}</h3>
-        <ul className="space-y-3">
-          {members.map((agent) => (
-            <li key={agent.id} className="space-y-2 rounded-2xl bg-surface p-3">
-              <div className="flex items-center gap-3">
-                <BotlingAvatar
-                  appearance={{ ...agent.appearance, mood: moodForStatus(agent.appearance.mood, agent.status) }}
-                  size={36}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-medium">{agent.name}</p>
-                  <p className="flex items-center gap-1.5 text-xs text-muted">
-                    <StatusDot status={agent.status} />
-                    {t.status[agent.status]}
-                  </p>
-                </div>
-              </div>
-              <VmPreview agent={agent} />
-            </li>
-          ))}
-        </ul>
-      </section>
     </div>
   );
 }

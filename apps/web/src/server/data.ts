@@ -113,6 +113,9 @@ export async function getBootstrap(user: { id: string; name: string; email: stri
       memberIds: c.members.sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime()).map((m) => m.agentId),
       unread: unreadByConversation.get(c.id) ?? 0,
       lastMessage: last ? toMessageDto(last) : null,
+      ...(c.type === "group"
+        ? { description: c.description, discussionMode: c.discussionMode, maxTurns: c.maxTurns, maxCostUsd: c.maxCostUsd }
+        : {}),
     };
   });
 

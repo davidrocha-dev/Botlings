@@ -60,6 +60,9 @@ export type Message = {
     routineRunStatus?: "running" | "completed" | "failed";
     routineSuggestion?: "pending" | "enabled" | "discarded";
     routineCron?: string;
+    memberEvent?: "joined" | "left";
+    memberAgentId?: string;
+    discussionStop?: "turns" | "cost";
     command?: string;
     pendingApprovals?: { id: string; agentName: string; detail: string }[];
   } | null;
@@ -75,6 +78,11 @@ export type Conversation = {
   unread: number;
   pinned: boolean;
   lastMessage: Message | null;
+  /** Groups only. */
+  description?: string;
+  discussionMode?: "discussion" | "mentions";
+  maxTurns?: number;
+  maxCostUsd?: number;
 };
 
 export type Bootstrap = {
