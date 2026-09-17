@@ -36,6 +36,8 @@ const schema = z.object({
   /** Free model(s) for small helper jobs ("Generate with AI"); comma-separated, tried in order. */
   BOTLINGS_UTILITY_MODEL: z.string().default("google/gemma-4-31b-it:free,openrouter/free"),
   BOTLINGS_LICENSE_PUBLIC_KEY: z.string().optional(),
+  /** base64 32-byte key for encrypting secrets; generated into data/secret.key when unset. */
+  BOTLINGS_SECRET_KEY: z.string().optional(),
   BOTLINGS_AGENT_IMAGE: z.string().default("botlings-agent:latest"),
   BOTLINGS_MAX_ACTIVE_COMPUTERS: z.coerce.number().int().min(1).default(4),
   BOTLINGS_COMPUTER_MEMORY_MB: z.coerce.number().int().min(512).default(1536),

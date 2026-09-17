@@ -1,4 +1,5 @@
 import type { ToolDefinition } from "@/server/openrouter";
+import { markSecretsUsed, redactSecrets, secretValuesForAgent } from "@/server/secrets/secrets";
 import { callRunner } from "./manager";
 
 const tool = (name: string, description: string, properties: Record<string, unknown>, required: string[] = []): ToolDefinition => ({
@@ -72,15 +73,29 @@ type Snapshot = { url: string; title: string; elements: string; text: string };
 const formatSnapshot = (p: Snapshot) =>
   `URL: ${p.url}\nTitle: ${p.title}\n\nInteractive elements:\n${p.elements || "(none)"}\n\nPage text:\n${p.text}`;
 
-/** Executes a computer tool and returns the text result for the model. */
+/**
+ * Executes a computer tool and returns the text result for the model. The agent's secrets are
+ * injected as environment variables into commands, and their values are redacted from every result.
+ */
 export async function executeComputerTool(agentId: string, name: string, args: Record<string, unknown>): Promise<string> {
+  const secrets = await secretValuesForAgent(agentId);
+  if (name === "run_command" && secrets.length) {
+    const command = String(args.command ?? "");
+    const used = secrets.filter((s) => new RegExp("\\$\\{?" + s.name + "\\b").test(command));
+    await markSecretsUsed(used.map((s) => s.id));
+  }
+  const result = await runTool(agentId, name, args, Object.fromEntries(secrets.map((s) => [s.name, s.value])));
+  return secrets.length ? redactSecrets(result, secrets) : result;
+}
+
+async function runTool(agentId: string, name: string, args: Record<string, unknown>, secretEnv: Record<string, string>): Promise<string> {
   switch (name) {
     case "run_command": {
       const timeoutMs = Math.min(Number(args.timeout_seconds ?? 120), 600) * 1000;
       const r = await callRunner<{ exitCode: number | null; timedOut: boolean; output: string }>(
         agentId,
         "/exec",
-        { command: args.command, timeoutMs },
+        { command: args.command, timeoutMs, env: secretEnv },
         timeoutMs + 15_000,
       );
       return `exit code: ${r.exitCode}${r.timedOut ? " (timed out)" : ""}\n${r.output || "(no output)"}`;

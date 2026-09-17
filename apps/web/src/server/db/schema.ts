@@ -9,6 +9,7 @@ import {
   primaryKey,
   text,
   timestamp,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 import type { BotlingAppearance } from "@/components/avatar/botling-options";
@@ -261,6 +262,39 @@ export const approvalRules = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.agentId, t.category] })],
+);
+
+/** Encrypted values agents can use (as environment variables) without ever seeing them. */
+export const secrets = pgTable(
+  "secrets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    /** Environment variable name, e.g. GITHUB_TOKEN. */
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    /** base64(iv | authTag | ciphertext), AES-256-GCM. */
+    ciphertext: text("ciphertext").notNull(),
+    ...timestamps,
+    lastUsedAt: timestamp("last_used_at", { withTimezone: true }),
+  },
+  (t) => [uniqueIndex("secrets_owner_name_idx").on(t.ownerId, t.name)],
+);
+
+/** Which agents may use which secret. */
+export const secretAccess = pgTable(
+  "secret_access",
+  {
+    secretId: uuid("secret_id")
+      .notNull()
+      .references(() => secrets.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+  },
+  (t) => [primaryKey({ columns: [t.secretId, t.agentId] })],
 );
 
 /** Agent computers whose deletion must still happen (the agent row is already gone). */

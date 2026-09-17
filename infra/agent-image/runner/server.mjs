@@ -1,6 +1,7 @@
 // Botlings agent runner — control API used by the Botlings server to operate this computer.
 import { spawn } from "node:child_process";
 import { createServer } from "node:http";
+import { networkInterfaces } from "node:os";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { chromium } from "playwright-core";
@@ -35,12 +36,22 @@ class HttpError extends Error {
 
 // ---------- Terminal ----------
 
-function runCommand({ command, timeoutMs = 120_000 }) {
+const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
+
+function runCommand({ command, timeoutMs = 120_000, env: extraEnv }) {
   if (typeof command !== "string" || !command.trim()) throw new HttpError(400, "command is required");
   const timeout = Math.min(Math.max(Number(timeoutMs) || 120_000, 1_000), 600_000);
 
+  // Secrets are passed per command only (never persisted in the container), and the runner's own
+  // token is never exposed to commands.
+  const env = { ...process.env };
+  delete env.BOTLINGS_RUNNER_TOKEN;
+  for (const [key, value] of Object.entries(extraEnv ?? {})) {
+    if (ENV_NAME.test(key) && typeof value === "string") env[key] = value;
+  }
+
   return new Promise((resolve) => {
-    const child = spawn("bash", ["-lc", command], { cwd: WORKSPACE, env: process.env });
+    const child = spawn("bash", ["-lc", command], { cwd: WORKSPACE, env });
     let output = "";
     const append = (chunk) => {
       if (output.length < MAX_OUTPUT * 2) output += chunk.toString();
@@ -237,6 +248,15 @@ const routes = {
   "POST /browser/type": browserType,
 };
 
+/** True for loopback and any address of this container's own interfaces. */
+function isLocalAddress(address = "") {
+  const ip = address.replace(/^::ffff:/, "");
+  if (ip === "::1" || ip.startsWith("127.")) return true;
+  return Object.values(networkInterfaces())
+    .flat()
+    .some((iface) => iface && iface.address === ip);
+}
+
 const server = createServer(async (req, res) => {
   const send = (status, body) => {
     res.writeHead(status, { "Content-Type": "application/json" });
@@ -244,6 +264,19 @@ const server = createServer(async (req, res) => {
   };
 
   if (req.method === "GET" && req.url === "/health") return send(200, { ok: true });
+
+  // Requests from inside the container (the agent's own commands) could bypass the Botlings
+  // server's approval checks, so only harmless routes are accepted from a local address.
+  if (isLocalAddress(req.socket.remoteAddress)) {
+    if (req.method === "POST" && req.url === "/browser/show") {
+      try {
+        return send(200, await browserShow());
+      } catch (error) {
+        return send(500, { error: error.message ?? String(error) });
+      }
+    }
+    return send(403, { error: "Forbidden from inside the computer" });
+  }
   if (req.headers["x-botlings-token"] !== TOKEN) return send(401, { error: "Unauthorized" });
 
   const handler = routes[`${req.method} ${req.url}`];

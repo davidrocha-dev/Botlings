@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { Languages, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import Link from "next/link";
+import { KeyRound, Languages, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
 import { logout } from "@/app/(auth)/login/actions";
 import { useStore } from "@/lib/store";
 import { IconButton } from "@/components/ui/icon-button";
@@ -100,6 +101,16 @@ export function SettingsMenu() {
                 options={locales.map((l) => ({ value: l, label: LOCALE_LABELS[l] }))}
               />
             </div>
+            <nav className="-mx-1 space-y-0.5 border-t border-border pt-2">
+              <Link
+                href="/settings/secrets"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-xl px-2 py-2 text-sm hover:bg-surface"
+              >
+                <KeyRound className="size-4 text-muted" />
+                {t.nav.secrets}
+              </Link>
+            </nav>
             <form action={logout} className="flex items-center justify-between gap-2 border-t border-border pt-3">
               <div className="min-w-0 px-1">
                 <p className="truncate text-sm font-medium">{user.name}</p>

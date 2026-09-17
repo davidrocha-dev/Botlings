@@ -6,6 +6,10 @@ set -euo pipefail
 mkdir -p "$HOME/workspace" "$HOME/.botlings"
 rm -f /tmp/.X1-lock /tmp/.X11-unix/X1
 
+# Only the runner gets the control token; desktop programs (and anything started from them) do not.
+TOKEN="$BOTLINGS_RUNNER_TOKEN"
+unset BOTLINGS_RUNNER_TOKEN
+
 Xvfb :1 -screen 0 "$SCREEN_GEOMETRY" -nolisten tcp &
 for _ in $(seq 1 50); do [ -e /tmp/.X11-unix/X1 ] && break; sleep 0.1; done
 
@@ -22,4 +26,4 @@ fluxbox >/dev/null 2>&1 &
 x11vnc -display :1 -forever -shared -nopw -localhost -rfbport 5900 -quiet >/dev/null 2>&1 &
 websockify --web /usr/share/novnc 6080 localhost:5900 >/dev/null 2>&1 &
 
-exec node /opt/runner/server.mjs
+BOTLINGS_RUNNER_TOKEN="$TOKEN" exec node /opt/runner/server.mjs

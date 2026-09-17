@@ -14,6 +14,7 @@ import {
 import { callRunner, dockerAvailable, getComputer } from "@/server/computers/manager";
 import { isAlwaysAllowed, requestApproval } from "@/server/approvals/approvals";
 import { classifyAction, type ElementInfo } from "@/server/approvals/classify";
+import { secretNamesForAgent } from "@/server/secrets/secrets";
 import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
 import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
 import type { ChatStreamEvent } from "@/lib/types";
@@ -132,7 +133,7 @@ const DELEGATION_GUIDE =
   "Delegation: handle simple things yourself (questions, quick answers, small tasks you can do well). Use delegate_task only when a crew member is clearly better suited for the work, e.g. it matches their role or needs their computer. When you delegate, tell the user briefly who is working on it; the result will come back to you and you will then summarise it.";
 
 const SAFETY_GUIDE =
-  "Risky actions on your computer (purchases, sending or publishing, deleting, pushing code, accepting terms…) automatically pause for the user's approval; just attempt them normally when the task requires it. If an action is denied, do not retry it or find a workaround — tell the user. You can never type passwords, codes or card details: ask the user to take control of the screen for those steps."
+  "Risky actions on your computer (purchases, sending or publishing, deleting, pushing code, accepting terms…) automatically pause for the user's approval; just attempt them normally when the task requires it. If an action is denied, do not retry it or find a workaround — tell the user. You can never type passwords, codes or card details: ask the user to take control of the screen for those steps.";
 
 function systemPrompt(opts: {
   agent: AgentRow;
@@ -140,6 +141,7 @@ function systemPrompt(opts: {
   conversationType: "direct" | "group";
   memberNames: string[];
   hasComputer: boolean;
+  secrets: { name: string; description: string }[];
   team: TeamMember[];
   canDelegate: boolean;
   canPropose: boolean;
@@ -166,6 +168,12 @@ function systemPrompt(opts: {
     opts.hasComputer &&
       "You have your own Linux computer with a terminal, files (~/workspace) and a Chromium browser the user can watch live. Use your tools to actually do tasks instead of describing them. Briefly tell the user what you are about to do, then do it. Never enter passwords or payment details; ask the user to take control of the screen for logins.",
     opts.hasComputer && SAFETY_GUIDE,
+    opts.hasComputer &&
+      opts.secrets.length > 0 &&
+      [
+        "Secrets you can use: they are set as environment variables in every run_command (e.g. \"$NAME\"). You never see their values and must never print, echo, save or send them anywhere except the service they are meant for.",
+        ...opts.secrets.map((s) => `- $${s.name}${s.description ? `: ${s.description}` : ""}`),
+      ].join("\n"),
     `You currently run on the model "${agent.model}". Never change model unless the user explicitly asks.`,
     "Reply in the same language the user writes in. Be concise and natural, like a chat message. Use Markdown sparingly.",
   ]
@@ -298,6 +306,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         conversationType: conversation.type,
         memberNames: [...conversation.names.values()],
         hasComputer: computerReady,
+        secrets: computerReady ? await secretNamesForAgent(agent.id) : [],
         team,
         canDelegate,
         canPropose,
