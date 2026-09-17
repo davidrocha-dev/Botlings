@@ -8,6 +8,7 @@
     "lint": "pnpm --filter web lint",
     "typecheck": "pnpm --filter web typecheck",
     "infra:up": "docker compose up -d",
-    "infra:down": "docker compose down"
+    "infra:down": "docker compose down",
+    "computers:build": "docker build -t botlings-agent:latest infra/agent-image"
   }
 }

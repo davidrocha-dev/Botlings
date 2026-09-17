@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, gte, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gt, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, schema } from "@/server/db";
 import { env } from "@/server/env";
 import { assertWithinLimit } from "@/server/license";
@@ -80,7 +80,7 @@ export async function getBootstrap(user: { id: string; name: string; email: stri
     ? await db
         .selectDistinctOn([schema.messages.conversationId])
         .from(schema.messages)
-        .where(inArray(schema.messages.conversationId, ids))
+        .where(and(inArray(schema.messages.conversationId, ids), ne(schema.messages.content, "")))
         .orderBy(schema.messages.conversationId, desc(schema.messages.createdAt))
     : [];
   const lastByConversation = new Map(lastMessages.map((m) => [m.conversationId, m]));
@@ -94,6 +94,7 @@ export async function getBootstrap(user: { id: string; name: string; email: stri
           and(
             inArray(schema.messages.conversationId, ids),
             eq(schema.messages.authorType, "agent"),
+            eq(schema.messages.kind, "text"),
             gt(schema.messages.createdAt, schema.conversations.lastReadAt),
           ),
         )
@@ -133,7 +134,7 @@ export async function getMessages(conversationId: string, limit = 200) {
   const rows = await db
     .select()
     .from(schema.messages)
-    .where(eq(schema.messages.conversationId, conversationId))
+    .where(and(eq(schema.messages.conversationId, conversationId), ne(schema.messages.content, "")))
     .orderBy(desc(schema.messages.createdAt))
     .limit(limit);
   return rows.reverse().map(toMessageDto);

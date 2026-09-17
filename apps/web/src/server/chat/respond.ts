@@ -10,13 +10,15 @@ import {
   type ToolDefinition,
   type Usage,
 } from "@/server/openrouter";
+import { dockerAvailable, getComputer } from "@/server/computers/manager";
+import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
 import type { ChatStreamEvent } from "@/lib/types";
 
 type AgentRow = typeof schema.agents.$inferSelect;
 type Emit = (event: ChatStreamEvent) => void;
 
 const HISTORY_LIMIT = 40;
-const MAX_TOOL_ROUNDS = 3;
+const MAX_TOOL_ROUNDS = 15;
 
 const SET_MODEL_TOOL: ToolDefinition = {
   type: "function",
@@ -41,13 +43,20 @@ function userAskedForModelChange(text: string, modelId: string) {
   return /\bmodel|\bmodelo/.test(lower) || (slug.length > 3 && lower.includes(slug));
 }
 
-function systemPrompt(agent: AgentRow, conversationType: "direct" | "group", memberNames: string[]) {
+function systemPrompt(
+  agent: AgentRow,
+  conversationType: "direct" | "group",
+  memberNames: string[],
+  hasComputer: boolean,
+) {
   return [
     `You are ${agent.name}, a Botling — an AI agent in the user's personal crew.`,
     agent.role && `Your role: ${agent.role}`,
     agent.prompt && `Instructions from the user:\n${agent.prompt}`,
     conversationType === "group" &&
       `You are in a group chat with the user and these Botlings: ${memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets. Only speak for yourself.`,
+    hasComputer &&
+      "You have your own Linux computer with a terminal, files (~/workspace) and a Chromium browser the user can watch live. Use your tools to actually do tasks instead of describing them. Briefly tell the user what you are about to do, then do it. Never enter passwords or payment details; ask the user to take control of the screen for logins.",
     `You currently run on the model "${agent.model}". Never change model unless the user explicitly asks.`,
     "Reply in the same language the user writes in. Be concise and natural, like a chat message. Use Markdown sparingly.",
   ]
@@ -149,14 +158,16 @@ export async function handleUserMessage(options: {
   emit({ type: "typing", agentId: agent.id });
 
   const catalogEntry = await findModel(agent.model).catch(() => undefined);
-  const tools = catalogEntry?.tools ? [SET_MODEL_TOOL] : undefined;
+  const supportsTools = catalogEntry?.tools ?? false;
+  const computerReady = supportsTools && (await dockerAvailable()) && (await getComputer(agent.id)).status !== "no_image";
+  const tools = supportsTools ? [SET_MODEL_TOOL, ...(computerReady ? COMPUTER_TOOLS : [])] : undefined;
 
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(agent, conversation.type, members.map((m) => m.name)) },
+    { role: "system", content: systemPrompt(agent, conversation.type, members.map((m) => m.name), computerReady) },
     ...(await buildHistory(conversationId, agent, names)),
   ];
 
-  const draftId = crypto.randomUUID();
+  let draftId = crypto.randomUUID();
   const modelUsed = agent.model;
   let content = "";
   const usage: Usage = { prompt_tokens: 0, completion_tokens: 0, cost: 0 };
@@ -183,9 +194,44 @@ export async function handleUserMessage(options: {
       if (!calls.length) break;
 
       messages.push({ role: "assistant", content: roundText || null, tool_calls: calls });
+
+      // Commit the text said before the tools run as its own bubble.
+      if (content.trim()) {
+        emit({
+          type: "message",
+          message: await saveMessage({ conversationId, authorType: "agent", agentId: agent.id, content: content.trim(), model: modelUsed }),
+        });
+      }
+      content = "";
+      draftId = crypto.randomUUID();
+
       for (const call of calls) {
         let result: string;
-        if (call.function.name === "set_model") {
+        let args: Record<string, unknown> = {};
+        try {
+          args = JSON.parse(call.function.arguments || "{}");
+        } catch {}
+
+        if (COMPUTER_TOOL_NAMES.has(call.function.name)) {
+          emit({ type: "typing", agentId: agent.id });
+          emit({
+            type: "message",
+            message: await saveMessage({
+              conversationId,
+              authorType: "agent",
+              agentId: agent.id,
+              kind: "tool",
+              content: describeToolCall(call.function.name, args),
+              metadata: { tool: call.function.name },
+            }),
+          });
+          try {
+            result = await executeComputerTool(agent.id, call.function.name, args);
+          } catch (error) {
+            result = `Tool failed: ${error instanceof Error ? error.message : String(error)}`;
+          }
+          emit({ type: "computer", agentId: agent.id });
+        } else if (call.function.name === "set_model") {
           let modelId = "";
           try {
             modelId = String(JSON.parse(call.function.arguments || "{}").model_id ?? "");
@@ -205,19 +251,29 @@ export async function handleUserMessage(options: {
       }
     }
 
-    emit({
-      type: "message",
-      message: await saveMessage({
+    const usageFields = {
+      model: modelUsed,
+      promptTokens: usage.prompt_tokens,
+      completionTokens: usage.completion_tokens,
+      costUsd: usage.cost ?? 0,
+    };
+    if (content.trim() || !tools?.length) {
+      emit({
+        type: "message",
+        message: await saveMessage({ conversationId, authorType: "agent", agentId: agent.id, content: content.trim() || "…", ...usageFields }),
+      });
+    } else {
+      // The turn ended with tool calls only: record its usage on a silent bookkeeping row.
+      await db.insert(schema.messages).values({
         conversationId,
         authorType: "agent",
         agentId: agent.id,
-        content: content.trim() || "…",
-        model: modelUsed,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        costUsd: usage.cost ?? 0,
-      }),
-    });
+        kind: "tool",
+        content: "",
+        metadata: { tool: "usage" },
+        ...usageFields,
+      });
+    }
     const [fresh] = await db.select().from(schema.agents).where(eq(schema.agents.id, agent.id));
     emit({ type: "agent", agent: await getAgentDto(fresh) });
   } catch (error) {

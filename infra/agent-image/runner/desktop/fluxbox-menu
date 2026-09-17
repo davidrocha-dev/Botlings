@@ -1,0 +1,7 @@
+[begin] (Botlings)
+  [exec] (Browser) {/opt/runner/desktop/open-browser.sh}
+  [exec] (Terminal) {xterm -fa Monospace -fs 11 -bg "#16161d" -fg "#e6e6ee" -e bash -c "cd ~/workspace; exec bash"}
+  [separator]
+  [workspaces] (Workspaces)
+  [reconfig] (Reload menu)
+[end]

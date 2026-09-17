@@ -1,12 +1,8 @@
-import path from "node:path";
-import { loadEnvConfig } from "@next/env";
 import type { NextConfig } from "next";
 
-// Env files live at the monorepo root (.env.local), shared by all apps.
-loadEnvConfig(path.resolve(process.cwd(), "../.."));
-
+// Env vars are read from the repo-root .env.local by src/server/env.ts.
 const nextConfig: NextConfig = {
-  serverExternalPackages: ["@node-rs/argon2", "@electric-sql/pglite"],
+  serverExternalPackages: ["@node-rs/argon2", "@electric-sql/pglite", "dockerode"],
 };
 
 export default nextConfig;

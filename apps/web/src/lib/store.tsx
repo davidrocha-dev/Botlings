@@ -14,6 +14,8 @@ type StoreValue = {
   /** Loaded message history per conversation (undefined = not loaded yet). */
   messagesByConversation: Record<string, Message[] | undefined>;
   drafts: Record<string, Draft | null>;
+  /** Bumped whenever an agent's computer may have changed state (used to refresh live views). */
+  computerTicks: Record<string, number>;
   typing: Record<string, string | null>;
   infoOpen: boolean;
   setInfoOpen: (open: boolean) => void;
@@ -35,6 +37,7 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
   const [typing, setTyping] = useState<Record<string, string | null>>({});
   const [busyAgents, setBusyAgents] = useState<Record<string, AgentStatus>>({});
   const [infoOpen, setInfoOpen] = useState(false);
+  const [computerTicks, setComputerTicks] = useState<Record<string, number>>({});
   const loading = useRef(new Set<string>());
 
   // The details panel starts open only where it fits as a third column.
@@ -112,6 +115,9 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
         case "agent":
           upsertAgent(event.agent);
           break;
+        case "computer":
+          setComputerTicks((c) => ({ ...c, [event.agentId]: (c[event.agentId] ?? 0) + 1 }));
+          break;
         case "done":
           break;
       }
@@ -176,6 +182,7 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       conversations,
       messagesByConversation,
       drafts,
+      computerTicks,
       typing,
       infoOpen,
       setInfoOpen,
@@ -193,6 +200,7 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       conversations,
       messagesByConversation,
       drafts,
+      computerTicks,
       typing,
       infoOpen,
       getAgent,

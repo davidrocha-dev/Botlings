@@ -106,6 +106,7 @@ export type MessageMetadata = {
   fromModel?: string;
   toModel?: string;
   errorCode?: number;
+  tool?: string;
 };
 
 export const messages = pgTable(
@@ -117,7 +118,7 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     authorType: text("author_type", { enum: ["user", "agent"] }).notNull(),
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
-    kind: text("kind", { enum: ["text", "event", "error"] }).notNull().default("text"),
+    kind: text("kind", { enum: ["text", "event", "error", "tool"] }).notNull().default("text"),
     content: text("content").notNull(),
     model: text("model"),
     promptTokens: integer("prompt_tokens"),

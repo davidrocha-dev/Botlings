@@ -1,0 +1,7 @@
+session.menuFile: ~/.fluxbox/menu
+session.styleOverlay: ~/.fluxbox/overlay
+session.screen0.workspaces: 1
+session.screen0.toolbar.visible: true
+session.screen0.toolbar.placement: BottomCenter
+session.screen0.toolbar.tools: prevworkspace, workspacename, nextworkspace, iconbar, clock
+session.screen0.strftimeFormat: %H:%M

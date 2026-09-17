@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "motion/react";
-import { AlertTriangle, Cpu, Loader2 } from "lucide-react";
+import { AlertTriangle, Cpu, FileText, Globe, Loader2, MousePointerClick, SquareTerminal } from "lucide-react";
 import { BotlingAvatar } from "@/components/avatar/botling-avatar";
 import { useI18n } from "@/lib/i18n/client";
 import { formatMessageTime } from "@/lib/format";
@@ -59,6 +59,37 @@ function EventRow({ message }: { message: Message }) {
       <code className="rounded-md bg-accent-soft px-1.5 py-0.5 font-mono text-[11px] text-accent">
         {message.metadata?.toModel}
       </code>
+    </motion.div>
+  );
+}
+
+const TOOL_ICONS: Record<string, React.ReactNode> = {
+  run_command: <SquareTerminal className="size-3.5" />,
+  read_file: <FileText className="size-3.5" />,
+  write_file: <FileText className="size-3.5" />,
+  list_files: <FileText className="size-3.5" />,
+  browser_open: <Globe className="size-3.5" />,
+  browser_snapshot: <Globe className="size-3.5" />,
+  browser_click: <MousePointerClick className="size-3.5" />,
+  browser_type: <MousePointerClick className="size-3.5" />,
+};
+
+function ToolRow({ message }: { message: Message }) {
+  const { t } = useI18n();
+  const tool = message.metadata?.tool ?? "";
+  const label = t.tools[tool as keyof typeof t.tools] ?? tool;
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, x: -6 }}
+      animate={{ opacity: 1, x: 0 }}
+      className="my-1 ml-9 flex max-w-[85%] items-center gap-2 text-xs text-muted"
+    >
+      <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-surface-2 text-accent">
+        {TOOL_ICONS[tool] ?? <Cpu className="size-3.5" />}
+      </span>
+      <span className="shrink-0 font-medium">{label}</span>
+      <code className="truncate rounded-md bg-surface px-1.5 py-0.5 font-mono text-[11px]">{message.text}</code>
     </motion.div>
   );
 }
@@ -124,6 +155,7 @@ export function MessageList({ conversation }: { conversation: Conversation }) {
           {list.map((message, index) => {
             if (message.kind === "event") return <EventRow key={message.id} message={message} />;
             if (message.kind === "error") return <ErrorRow key={message.id} message={message} />;
+            if (message.kind === "tool") return <ToolRow key={message.id} message={message} />;
 
             const prev = list[index - 1];
             const next = list[index + 1];

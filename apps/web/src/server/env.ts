@@ -1,4 +1,30 @@
+import fs from "node:fs";
+import path from "node:path";
 import { z } from "zod";
+
+/**
+ * Env files live at the monorepo root. Next.js only loads env files from apps/web (and resets
+ * process.env when it does), so the root files are read here, at server-module load time.
+ * Values already present in process.env win.
+ */
+function loadRootEnv() {
+  const root = path.resolve(process.cwd(), "../..");
+  for (const name of [".env.local", ".env"]) {
+    let text: string;
+    try {
+      text = fs.readFileSync(path.join(root, name), "utf8");
+    } catch {
+      continue;
+    }
+    for (const line of text.split(/\r?\n/)) {
+      const match = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/);
+      if (!match || process.env[match[1]] !== undefined) continue;
+      process.env[match[1]] = match[2].replace(/^(['"])(.*)\1$/, "$2");
+    }
+  }
+}
+
+loadRootEnv();
 
 const schema = z.object({
   /** Optional — without it Botlings uses an embedded PGlite database. */
@@ -8,6 +34,11 @@ const schema = z.object({
   BOTLINGS_MODE: z.enum(["personal", "commercial"]).default("personal"),
   BOTLINGS_DEFAULT_MODEL: z.string().default("google/gemma-4-31b-it:free"),
   BOTLINGS_LICENSE_PUBLIC_KEY: z.string().optional(),
+  BOTLINGS_AGENT_IMAGE: z.string().default("botlings-agent:latest"),
+  BOTLINGS_MAX_ACTIVE_COMPUTERS: z.coerce.number().int().min(1).default(4),
+  BOTLINGS_COMPUTER_MEMORY_MB: z.coerce.number().int().min(512).default(1536),
+  BOTLINGS_COMPUTER_CPUS: z.coerce.number().min(0.5).default(1.5),
+  BOTLINGS_COMPUTER_IDLE_MINUTES: z.coerce.number().min(1).default(15),
   NODE_ENV: z.string().default("development"),
 });
 

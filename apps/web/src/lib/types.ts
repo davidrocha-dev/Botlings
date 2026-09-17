@@ -24,10 +24,10 @@ export type Message = {
   author: MessageAuthor;
   text: string;
   createdAt: number;
-  kind: "text" | "event" | "error";
+  kind: "text" | "event" | "error" | "tool";
   model?: string | null;
   costUsd?: number | null;
-  metadata?: { fromModel?: string; toModel?: string; errorCode?: number } | null;
+  metadata?: { fromModel?: string; toModel?: string; errorCode?: number; tool?: string } | null;
   /** True while the reply is still streaming. */
   streaming?: boolean;
 };
@@ -56,6 +56,7 @@ export type ChatStreamEvent =
   | { type: "delta"; messageId: string; agentId: string; text: string }
   | { type: "message"; message: Message }
   | { type: "agent"; agent: Agent }
+  | { type: "computer"; agentId: string }
   | { type: "done" };
 
 export type ModelOption = {
@@ -67,4 +68,10 @@ export type ModelOption = {
   free: boolean;
   tools: boolean;
   vision: boolean;
+};
+
+export type ComputerState = {
+  status: "unavailable" | "no_image" | "stopped" | "starting" | "running";
+  /** noVNC page on the local machine when running. */
+  vncUrl?: string;
 };

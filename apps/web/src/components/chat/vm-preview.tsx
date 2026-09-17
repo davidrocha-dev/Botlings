@@ -1,62 +1,143 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { createPortal } from "react-dom";
 import { AnimatePresence, motion } from "motion/react";
-import { Hand, Maximize2, X } from "lucide-react";
+import { Globe, Loader2, Maximize2, MonitorOff, Power, TriangleAlert, X } from "lucide-react";
 import { IconButton } from "@/components/ui/icon-button";
 import { useI18n } from "@/lib/i18n/client";
-import type { Agent } from "@/lib/types";
+import { useStore } from "@/lib/store";
+import type { Agent, ComputerState } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
-/**
- * Placeholder for the agent's live screen.
- * Phase 2 swaps the mock screen for a noVNC canvas streamed from the agent's container.
- */
-function MockScreen({ agent, large = false }: { agent: Agent; large?: boolean }) {
-  const active = agent.status === "working" || agent.status === "thinking";
+const noopSubscribe = () => () => {};
+const POLL_MS = 15_000;
+
+type ComputerAction = "start" | "stop" | "browser";
+
+function useComputer(agentId: string, watching: boolean) {
+  const { computerTicks } = useStore();
+  const tick = computerTicks[agentId] ?? 0;
+  const [state, setState] = useState<ComputerState | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  /** The action currently in flight, so only its button shows progress. */
+  const [pending, setPending] = useState<ComputerAction | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/agents/${agentId}/computer${watching ? "?watch=1" : ""}`);
+      if (res.ok) setState(await res.json());
+    } catch {}
+  }, [agentId, watching]);
+
+  useEffect(() => {
+    // Refresh on mount, whenever the agent used its computer, and periodically.
+    // State is only set after the fetch resolves, not synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void refresh();
+    const timer = setInterval(refresh, POLL_MS);
+    return () => clearInterval(timer);
+  }, [refresh, tick]);
+
+  const act = useCallback(
+    async (action: ComputerAction) => {
+      setPending(action);
+      setError(null);
+      if (action === "start") setState({ status: "starting" });
+      try {
+        const res = await fetch(`/api/agents/${agentId}/computer`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action }),
+        });
+        const data = await res.json();
+        if (!res.ok) setError(data.error ?? "failed");
+        await refresh();
+      } finally {
+        setPending(null);
+      }
+    },
+    [agentId, refresh],
+  );
+
+  return { state, error, pending, act };
+}
+
+function Screen({
+  state,
+  interactive,
+  onStart,
+  pending,
+  error,
+}: {
+  state: ComputerState | null;
+  interactive: boolean;
+  onStart: () => void;
+  pending: boolean;
+  error: string | null;
+}) {
+  const { t } = useI18n();
+
+  if (state?.status === "running" && state.vncUrl) {
+    return (
+      <iframe
+        src={`${state.vncUrl}&view_only=${interactive ? 0 : 1}&show_dot=${interactive ? 1 : 0}`}
+        title={t.info.computer}
+        className={cn("h-full w-full border-0 bg-black", !interactive && "pointer-events-none")}
+      />
+    );
+  }
+
+  const message =
+    !state || state.status === "starting"
+      ? t.info.starting
+      : state.status === "unavailable"
+        ? t.info.dockerUnavailable
+        : state.status === "no_image"
+          ? t.info.imageMissing
+          : t.info.computerStopped;
+
   return (
-    <div className="relative flex h-full w-full flex-col overflow-hidden bg-[#1a1a22] text-[#d9d9e3]">
-      <div className={cn("flex items-center gap-1.5 bg-[#23232d]", large ? "h-9 px-3" : "h-5 px-2")}>
-        {["#ff5f57", "#febc2e", "#28c840"].map((c) => (
-          <span key={c} className={cn("rounded-full", large ? "size-3" : "size-1.5")} style={{ background: c }} />
-        ))}
-        <div className={cn("ml-2 flex-1 truncate rounded bg-[#15151c] text-[#8b8b99]", large ? "px-3 py-1 text-xs" : "h-2.5")}>
-          {large && "github.com/botlings/landing — Pull request"}
-        </div>
-      </div>
-      <div className={cn("flex-1 space-y-2", large ? "p-8" : "p-2.5")}>
-        {[72, 94, 58, 86, 40].map((w, i) => (
-          <motion.div
-            key={i}
-            className={cn("rounded bg-[#2c2c38]", large ? "h-4" : "h-1.5")}
-            style={{ width: `${w}%` }}
-            animate={active ? { opacity: [0.5, 1, 0.5] } : { opacity: 0.6 }}
-            transition={{ duration: 2.4, repeat: Infinity, delay: i * 0.2 }}
-          />
-        ))}
-      </div>
-      {active && (
-        <motion.svg
-          viewBox="0 0 24 24"
-          className={cn("absolute drop-shadow", large ? "size-6" : "size-3")}
-          animate={{ left: ["20%", "64%", "42%", "20%"], top: ["30%", "52%", "72%", "30%"] }}
-          transition={{ duration: 7, repeat: Infinity, ease: "easeInOut" }}
+    <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-surface-2 p-4 text-center">
+      {!state || state.status === "starting" ? (
+        <Loader2 className="size-5 animate-spin text-accent" />
+      ) : state.status === "stopped" ? (
+        <MonitorOff className="size-5 text-subtle" />
+      ) : (
+        <TriangleAlert className="size-5 text-warning" />
+      )}
+      <p className="max-w-60 text-xs leading-relaxed text-muted">{error ? `${t.info.computerError} ${error}` : message}</p>
+      {state?.status === "stopped" && (
+        <span
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onStart();
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.stopPropagation();
+              onStart();
+            }
+          }}
+          aria-disabled={pending}
+          className="mt-1 inline-flex h-7 cursor-pointer items-center gap-1.5 rounded-full bg-accent px-3 text-xs font-medium text-accent-contrast hover:bg-accent-hover"
         >
-          <path d="M4 2 L4 20 L9 15 L13 22 L16 20 L12 13 L19 13 Z" fill="white" stroke="black" strokeWidth="1.2" />
-        </motion.svg>
+          <Power className="size-3.5" />
+          {t.info.startComputer}
+        </span>
       )}
     </div>
   );
 }
 
-const noopSubscribe = () => () => {};
-
 export function VmPreview({ agent }: { agent: Agent }) {
   const { t } = useI18n();
   const isClient = useSyncExternalStore(noopSubscribe, () => true, () => false);
   const [fullscreen, setFullscreen] = useState(false);
-  const live = agent.status !== "paused" && agent.status !== "offline";
+  const { state, error, pending, act } = useComputer(agent.id, fullscreen);
+  const running = state?.status === "running";
 
   useEffect(() => {
     if (!fullscreen) return;
@@ -67,28 +148,38 @@ export function VmPreview({ agent }: { agent: Agent }) {
 
   return (
     <>
-      <button
-        type="button"
-        onClick={() => setFullscreen(true)}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={() => running && setFullscreen(true)}
+        onKeyDown={(e) => e.key === "Enter" && running && setFullscreen(true)}
         aria-label={t.info.openFullscreen}
-        className="group relative block aspect-video w-full overflow-hidden rounded-2xl border border-border shadow-soft transition-transform hover:scale-[1.01] active:scale-[0.99]"
+        title={running ? t.info.viewOnlyHint : undefined}
+        className={cn(
+          "group relative block aspect-video w-full overflow-hidden rounded-2xl border border-border shadow-soft",
+          running && "cursor-pointer transition-transform hover:scale-[1.01]",
+        )}
       >
-        <MockScreen agent={agent} />
-        <span className="absolute top-2 left-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase backdrop-blur">
-          <span className={cn("size-1.5 rounded-full", live ? "animate-pulse bg-danger" : "bg-white/50")} />
-          {live ? t.info.live : t.status[agent.status]}
-        </span>
-        <span className="absolute right-2 bottom-2 flex size-7 items-center justify-center rounded-full bg-black/55 text-white opacity-0 backdrop-blur transition-opacity group-hover:opacity-100">
-          <Maximize2 className="size-3.5" />
-        </span>
-      </button>
+        <Screen state={state} interactive={false} onStart={() => act("start")} pending={pending !== null} error={error} />
+        {running && (
+          <>
+            <span className="absolute top-2 left-2 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase backdrop-blur">
+              <span className="size-1.5 animate-pulse rounded-full bg-danger" />
+              {t.info.live}
+            </span>
+            <span className="absolute right-2 bottom-2 flex size-7 items-center justify-center rounded-full bg-black/55 text-white opacity-0 backdrop-blur transition-opacity group-hover:opacity-100">
+              <Maximize2 className="size-3.5" />
+            </span>
+          </>
+        )}
+      </div>
 
       {isClient &&
         createPortal(
           <AnimatePresence>
             {fullscreen && (
               <motion.div
-                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-0 backdrop-blur-sm md:p-8"
+                className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 backdrop-blur-sm md:p-8"
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 exit={{ opacity: 0 }}
@@ -100,34 +191,51 @@ export function VmPreview({ agent }: { agent: Agent }) {
                   exit={{ scale: 0.94, y: 12 }}
                   transition={{ type: "spring", stiffness: 380, damping: 32 }}
                   onClick={(event) => event.stopPropagation()}
-                  className="flex h-full w-full max-w-6xl flex-col overflow-hidden bg-elevated shadow-modal md:h-auto md:rounded-3xl"
+                  className="pt-safe flex h-full w-full max-w-6xl flex-col overflow-hidden bg-elevated shadow-modal md:h-[min(calc(100dvh-4rem),52rem)] md:rounded-3xl"
                 >
-                  <div className="pt-safe flex items-center justify-between border-b border-border px-4 py-2.5">
-                    <div>
-                      <p className="text-sm font-semibold">
+                  <div className="flex shrink-0 items-center gap-3 border-b border-border py-3 pr-3 pl-5">
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-2 truncate text-sm font-semibold">
+                        {running && <span className="size-2 shrink-0 animate-pulse rounded-full bg-success" />}
                         {t.info.computer} · {agent.name}
                       </p>
-                      <p className="text-xs text-muted">{t.status[agent.status]}</p>
+                      <p className="hidden truncate text-xs text-muted sm:block">{t.info.desktopHint}</p>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        disabled
-                        title={t.info.screenPlaceholder}
-                        className="inline-flex h-8 items-center gap-1.5 rounded-full bg-surface-2 px-3 text-xs font-medium text-muted disabled:opacity-60"
-                      >
-                        <Hand className="size-3.5" />
-                        {t.info.takeControl}
-                      </button>
-                      <IconButton aria-label={t.info.close} onClick={() => setFullscreen(false)}>
-                        <X className="size-[18px]" />
-                      </IconButton>
-                    </div>
+                    {running && (
+                      <div className="flex shrink-0 items-center gap-2">
+                        <button
+                          type="button"
+                          disabled={pending !== null}
+                          onClick={() => act("browser")}
+                          className="inline-flex h-9 items-center gap-2 rounded-full bg-accent px-3.5 text-sm font-medium text-accent-contrast shadow-soft transition-colors hover:bg-accent-hover disabled:cursor-default disabled:opacity-80"
+                        >
+                          {pending === "browser" ? <Loader2 className="size-4 animate-spin" /> : <Globe className="size-4" />}
+                          <span className="hidden sm:inline">{t.info.openBrowser}</span>
+                        </button>
+                        <button
+                          type="button"
+                          disabled={pending !== null}
+                          onClick={() => act("stop").then(() => setFullscreen(false))}
+                          className="inline-flex h-9 items-center gap-2 rounded-full border border-border-strong px-3.5 text-sm font-medium text-text transition-colors hover:border-danger/40 hover:bg-danger/10 hover:text-danger disabled:cursor-default disabled:opacity-60"
+                        >
+                          {pending === "stop" ? <Loader2 className="size-4 animate-spin" /> : <Power className="size-4" />}
+                          <span className="hidden sm:inline">{t.info.stopComputer}</span>
+                        </button>
+                      </div>
+                    )}
+                    <div className="mx-1 h-6 w-px shrink-0 bg-border" />
+                    <IconButton aria-label={t.info.close} onClick={() => setFullscreen(false)}>
+                      <X className="size-[18px]" />
+                    </IconButton>
                   </div>
-                  <div className="relative aspect-video w-full flex-1 md:flex-none">
-                    <MockScreen agent={agent} large />
+                  {error && running && (
+                    <p role="alert" className="bg-danger/10 px-4 py-1.5 text-xs text-danger">
+                      {t.info.computerError} {error}
+                    </p>
+                  )}
+                  <div className="relative min-h-0 w-full flex-1 bg-black">
+                    <Screen state={state} interactive onStart={() => act("start")} pending={pending !== null} error={error} />
                   </div>
-                  <p className="pb-safe px-4 py-2 text-center text-xs text-subtle">{t.info.screenPlaceholder}</p>
                 </motion.div>
               </motion.div>
             )}

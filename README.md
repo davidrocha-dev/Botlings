@@ -21,6 +21,12 @@ Open http://localhost:3000 — the first visit creates the owner account.
 
 Put `OPENROUTER_API_KEY` in `.env.local` at the repo root (see `.env.example`). The database is an embedded PGlite in `data/` by default.
 
+Agent computers (Docker Desktop must be running):
+
+```bash
+pnpm computers:build
+```
+
 Optional Postgres (set `DATABASE_URL`):
 
 ```bash
@@ -36,11 +42,13 @@ pnpm infra:up
 | `pnpm lint` | ESLint |
 | `pnpm typecheck` | TypeScript checks |
 | `pnpm infra:up` / `infra:down` | Start/stop Postgres + Redis |
+| `pnpm computers:build` | Build the agent computer image |
 
 ## Structure
 
 ```
-apps/web        Next.js PWA (UI, API routes)
+apps/web          Next.js PWA (UI, API routes)
+infra/agent-image Docker image for each agent's computer
 packages/       Shared packages (coming: db, agent-runner, orchestrator)
 docs/PROJETO.md Full product spec and roadmap
 ```
