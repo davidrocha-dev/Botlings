@@ -9,6 +9,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { useStore } from "@/lib/store";
 import type { Message, TaskStatus } from "@/lib/types";
 import { cn } from "@/lib/cn";
+import { Markdown } from "./markdown";
 
 const STATUS_STYLE: Record<TaskStatus, string> = {
   running: "bg-accent-soft text-accent",
@@ -90,9 +91,9 @@ export function TaskCard({ message }: { message: Message }) {
             {status === "failed" ? t.tasks.showError : t.tasks.showResult}
           </button>
           {expanded && (
-            <p className="mt-1.5 max-h-60 overflow-y-auto rounded-xl bg-bg p-2.5 text-xs leading-relaxed break-words whitespace-pre-wrap">
-              {detail}
-            </p>
+            <div className="mt-1.5 max-h-60 overflow-y-auto rounded-xl bg-bg p-2.5 text-xs leading-relaxed break-words">
+              <Markdown text={detail} />
+            </div>
           )}
         </div>
       )}

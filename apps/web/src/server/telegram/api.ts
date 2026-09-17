@@ -1,4 +1,5 @@
 import { env } from "@/server/env";
+import { markdownToTelegramHtml } from "./format";
 
 /** Minimal Telegram Bot API client (only what Botlings uses). */
 
@@ -55,17 +56,28 @@ export function splitMessage(text: string) {
   return parts;
 }
 
-/** Plain text (no parse_mode), so model output can never break formatting. Keyboard goes on the last part. */
-export async function sendText(chatId: string | number, text: string, keyboard?: InlineKeyboard) {
+/**
+ * Sends text, split to fit. With `markdown`, each part is formatted as Telegram HTML and resent as
+ * plain text if Telegram rejects the markup. Keyboard goes on the last part.
+ */
+export async function sendText(chatId: string | number, text: string, keyboard?: InlineKeyboard, options: { markdown?: boolean } = {}) {
   const parts = splitMessage(text || "…");
   let last: TelegramMessage | null = null;
   for (const [i, part] of parts.entries()) {
-    last = await tg<TelegramMessage>("sendMessage", {
+    const base = {
       chat_id: chatId,
-      text: part,
       link_preview_options: { is_disabled: true },
       ...(keyboard && i === parts.length - 1 ? { reply_markup: keyboard } : {}),
-    });
+    };
+    if (options.markdown) {
+      try {
+        last = await tg<TelegramMessage>("sendMessage", { ...base, text: markdownToTelegramHtml(part), parse_mode: "HTML" });
+        continue;
+      } catch (error) {
+        if (!(error instanceof TelegramError && error.code === 400)) throw error;
+      }
+    }
+    last = await tg<TelegramMessage>("sendMessage", { ...base, text: part });
   }
   return last;
 }

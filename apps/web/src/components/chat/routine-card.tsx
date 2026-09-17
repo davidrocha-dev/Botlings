@@ -8,6 +8,7 @@ import { useI18n } from "@/lib/i18n/client";
 import { useStore } from "@/lib/store";
 import type { Message } from "@/lib/types";
 import { cn } from "@/lib/cn";
+import { stripMarkdown } from "@/lib/markdown-text";
 
 /** A routine run in progress/finished, or a routine the agent suggested (enable / discard). */
 export function RoutineCard({ message }: { message: Message }) {
@@ -67,7 +68,7 @@ export function RoutineCard({ message }: { message: Message }) {
           </span>
         </div>
       </div>
-      <p className="mt-2.5 line-clamp-4 text-sm leading-snug text-muted">{message.text}</p>
+      <p className="mt-2.5 line-clamp-4 text-sm leading-snug text-muted">{stripMarkdown(message.text)}</p>
       {meta.routineCron && <p className="mt-1.5 font-mono text-[11px] text-subtle">cron: {meta.routineCron}</p>}
 
       {suggestion === "pending" ? (

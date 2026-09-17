@@ -11,6 +11,7 @@ import { useStore } from "@/lib/store";
 import type { Conversation, Message } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { ApprovalCard } from "./approval-card";
+import { Markdown } from "./markdown";
 import { ProposalCard } from "./proposal-card";
 import { RoutineCard } from "./routine-card";
 import { TaskCard } from "./task-card";
@@ -237,13 +238,14 @@ export function MessageList({ conversation }: { conversation: Conversation }) {
                   <div
                     title={message.model ?? undefined}
                     className={cn(
-                      "max-w-[78%] rounded-[20px] px-3.5 py-2 text-[15px] leading-snug break-words whitespace-pre-wrap md:max-w-[70%]",
+                      "max-w-[78%] min-w-0 rounded-[20px] px-3.5 py-2 text-[15px] leading-snug break-words md:max-w-[70%]",
+                      mine && "whitespace-pre-wrap",
                       mine ? "bg-accent text-accent-contrast" : "bg-bubble-in text-bubble-in-text",
                       mine ? "rounded-br-md" : "rounded-bl-md",
                       !startsBlock && (mine ? "rounded-tr-md" : "rounded-tl-md"),
                     )}
                   >
-                    {message.text}
+                    {mine ? message.text : <Markdown text={message.text} />}
                     {message.streaming && (
                       <span className="ml-0.5 inline-block h-4 w-1.5 translate-y-0.5 animate-pulse rounded-sm bg-current opacity-60" />
                     )}

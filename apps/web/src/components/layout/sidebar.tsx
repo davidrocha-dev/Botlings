@@ -8,6 +8,7 @@ import { ConversationAvatar } from "@/components/avatar/conversation-avatar";
 import { SettingsMenu } from "./settings-menu";
 import { useI18n } from "@/lib/i18n/client";
 import { formatListTime } from "@/lib/format";
+import { stripMarkdown } from "@/lib/markdown-text";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/cn";
 
@@ -81,10 +82,10 @@ export function Sidebar() {
                   : last.kind === "proposal"
                   ? t.proposals.title
                   : last.kind === "task"
-                  ? `${t.tasks.status[last.metadata?.taskStatus ?? "running"]}: ${last.text}`
+                  ? `${t.tasks.status[last.metadata?.taskStatus ?? "running"]}: ${stripMarkdown(last.text)}`
                   : last.kind === "tool"
                   ? `${t.tools[last.metadata?.tool as keyof typeof t.tools] ?? ""} ${last.text}`
-                  : `${conversation.type === "group" && lastAuthor ? `${lastAuthor}: ` : ""}${last.text}`
+                  : `${conversation.type === "group" && lastAuthor ? `${lastAuthor}: ` : ""}${stripMarkdown(last.text)}`
                 : "";
 
             return (

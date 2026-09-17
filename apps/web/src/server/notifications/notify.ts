@@ -1,4 +1,5 @@
 import { eq } from "drizzle-orm";
+import { stripMarkdown } from "@/lib/markdown-text";
 import { db, schema } from "@/server/db";
 import type { NotificationPrefs } from "@/server/db/schema";
 import { isUserPresent } from "./presence";
@@ -65,14 +66,8 @@ export function notificationText(event: NotificationEvent, locale: string) {
   }
 }
 
-/** Plain text for notification bodies: drops Markdown noise and collapses whitespace. */
-export function plainText(text: string) {
-  return text
-    .replace(/```[\s\S]*?```/g, "[code]")
-    .replace(/[*_`#>]+/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+/** Plain text for notification bodies: drops Markdown syntax and collapses whitespace. */
+export const plainText = stripMarkdown;
 
 /**
  * Notifies the user outside the app. Push only fires when the category is on and the user isn't

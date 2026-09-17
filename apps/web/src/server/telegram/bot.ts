@@ -5,7 +5,7 @@ import { rateLimit } from "@/server/auth/rate-limit";
 import { handleUserMessage } from "@/server/chat/respond";
 import { db, schema } from "@/server/db";
 import { publish } from "@/server/events";
-import { notificationText, plainText, registerNotificationChannel, type NotificationChannel } from "@/server/notifications/notify";
+import { notificationText, registerNotificationChannel, type NotificationChannel } from "@/server/notifications/notify";
 import { sendText, telegramToken, tg, TelegramError, type TelegramCallbackQuery, type TelegramMessage, type TelegramUpdate, type TelegramUser } from "./api";
 
 /**
@@ -314,7 +314,7 @@ const telegramChannel: NotificationChannel = async (userId, event, ctx) => {
     const active = await activeAgent(link);
     // In the chat you're using from Telegram, replies read like a normal chat; elsewhere, say who wrote.
     const prefix = bound && active?.name === event.agentName ? "" : `${event.agentName}:\n`;
-    await sendText(link.chatId, prefix + event.text);
+    await sendText(link.chatId, prefix + event.text, undefined, { markdown: true });
     return bound;
   }
 
@@ -335,7 +335,7 @@ const telegramChannel: NotificationChannel = async (userId, event, ctx) => {
 
   if (!ctx.enabled || ctx.present) return false;
   const { title, body } = notificationText(event, lang);
-  await sendText(link.chatId, `⏰ ${title}\n\n${plainText(body).slice(0, 1500)}`);
+  await sendText(link.chatId, `⏰ ${title}\n\n${body.slice(0, 3500)}`, undefined, { markdown: true });
   return false;
 };
 
