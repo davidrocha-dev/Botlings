@@ -18,6 +18,7 @@
     "@next/env": "^16.3.5",
     "@node-rs/argon2": "^2.2.1",
     "clsx": "^2.1.1",
+    "cron-parser": "^5.10.1",
     "dockerode": "^5.0.1",
     "drizzle-orm": "^0.45.2",
     "lucide-react": "^1.46.0",

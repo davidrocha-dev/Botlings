@@ -6,4 +6,6 @@ export async function register() {
   await failInterruptedTasks().catch((error) => console.error("[tasks] startup cleanup", error));
   const { expireStaleApprovals } = await import("./server/approvals/approvals");
   await expireStaleApprovals().catch((error) => console.error("[approvals] startup cleanup", error));
+  const { startScheduler } = await import("./server/routines/routines");
+  await startScheduler().catch((error) => console.error("[routines] scheduler", error));
 }

@@ -30,7 +30,7 @@ export type Message = {
   author: MessageAuthor;
   text: string;
   createdAt: number;
-  kind: "text" | "event" | "error" | "tool" | "task" | "proposal" | "approval" | "memory";
+  kind: "text" | "event" | "error" | "tool" | "task" | "proposal" | "approval" | "memory" | "routine";
   model?: string | null;
   costUsd?: number | null;
   metadata?: {
@@ -54,6 +54,12 @@ export type Message = {
     approvalTool?: string;
     approvalDetail?: string;
     approvalAlwaysAllowed?: boolean;
+    routineId?: string;
+    routineName?: string;
+    routineRunId?: string;
+    routineRunStatus?: "running" | "completed" | "failed";
+    routineSuggestion?: "pending" | "enabled" | "discarded";
+    routineCron?: string;
   } | null;
   /** True while the reply is still streaming. */
   streaming?: boolean;

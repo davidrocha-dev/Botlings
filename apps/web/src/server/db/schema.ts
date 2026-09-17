@@ -135,6 +135,13 @@ export type MessageMetadata = {
   approvalTool?: string;
   approvalDetail?: string;
   approvalAlwaysAllowed?: boolean;
+  /** Routine cards (kind "routine"): a run, or an agent's routine suggestion. */
+  routineId?: string;
+  routineName?: string;
+  routineRunId?: string;
+  routineRunStatus?: "running" | "completed" | "failed";
+  routineSuggestion?: "pending" | "enabled" | "discarded";
+  routineCron?: string;
 };
 
 export type ApprovalStatus = "pending" | "approved" | "denied" | "expired";
@@ -150,7 +157,7 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     authorType: text("author_type", { enum: ["user", "agent"] }).notNull(),
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
-    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal", "approval", "memory"] })
+    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal", "approval", "memory", "routine"] })
       .notNull()
       .default("text"),
     content: text("content").notNull(),
@@ -266,6 +273,58 @@ export const approvalRules = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.agentId, t.category] })],
+);
+
+/** How a routine's schedule was defined, so the UI can show and edit it in plain words. */
+export type RoutineSchedule =
+  | { type: "daily"; time: string }
+  | { type: "weekdays"; time: string }
+  | { type: "weekly"; day: number; time: string }
+  | { type: "hourly"; every: number }
+  | { type: "cron"; cron: string };
+
+/** A scheduled job: at each occurrence the agent works on `instruction` in its own chat. */
+export const routines = pgTable(
+  "routines",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    instruction: text("instruction").notNull(),
+    schedule: jsonb("schedule").$type<RoutineSchedule>().notNull(),
+    cron: text("cron").notNull(),
+    timeZone: text("time_zone").notNull(),
+    enabled: boolean("enabled").notNull().default(true),
+    createdBy: text("created_by", { enum: ["user", "agent"] }).notNull().default("user"),
+    nextRunAt: timestamp("next_run_at", { withTimezone: true }),
+    lastRunAt: timestamp("last_run_at", { withTimezone: true }),
+    ...timestamps,
+  },
+  (t) => [index("routines_due_idx").on(t.enabled, t.nextRunAt), index("routines_owner_idx").on(t.ownerId)],
+);
+
+export const routineRuns = pgTable(
+  "routine_runs",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    routineId: uuid("routine_id")
+      .notNull()
+      .references(() => routines.id, { onDelete: "cascade" }),
+    trigger: text("trigger", { enum: ["schedule", "manual"] }).notNull(),
+    status: text("status", { enum: ["running", "completed", "failed"] }).notNull().default("running"),
+    result: text("result"),
+    error: text("error"),
+    costUsd: numeric("cost_usd", { precision: 14, scale: 8, mode: "number" }).notNull().default(0),
+    cardMessageId: uuid("card_message_id"),
+    startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+    finishedAt: timestamp("finished_at", { withTimezone: true }),
+  },
+  (t) => [index("routine_runs_routine_idx").on(t.routineId, t.startedAt)],
 );
 
 /** Durable facts an agent keeps across conversations; visible and editable by the owner. */

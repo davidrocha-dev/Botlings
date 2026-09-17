@@ -72,6 +72,8 @@ export function Sidebar() {
               : last
                 ? last.kind === "event"
                   ? `${t.chat.modelChanged}: ${last.metadata?.toModel ?? ""}`
+                  : last.kind === "routine"
+                  ? `⏰ ${last.metadata?.routineName ?? ""}`
                   : last.kind === "memory"
                   ? `${t.memory.remembered} ${last.text}`
                   : last.kind === "approval"

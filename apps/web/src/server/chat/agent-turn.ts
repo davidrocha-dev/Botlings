@@ -1,6 +1,6 @@
 import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { db, schema } from "@/server/db";
-import { getAgentDto, toMessageDto } from "@/server/data";
+import { getAgentDto } from "@/server/data";
 import { env } from "@/server/env";
 import {
   OpenRouterError,
@@ -19,7 +19,11 @@ import { BudgetExceededError, assertWithinBudget } from "@/server/usage/usage";
 import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
 import { MEMORY_TOOLS, MEMORY_TOOL_NAMES, executeMemoryTool, listMemories, memorySection, updateConversationSummary, type MemoryRow } from "./memory";
 import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
+import { saveMessage } from "./save-message";
+import { SUGGEST_ROUTINE_TOOL, suggestRoutine } from "@/server/routines/suggest";
 import type { ChatStreamEvent } from "@/lib/types";
+
+export { saveMessage };
 
 export type AgentRow = typeof schema.agents.$inferSelect;
 export type Emit = (event: ChatStreamEvent) => void;
@@ -29,8 +33,9 @@ type TeamMember = { name: string; role: string };
  * - chat: answering the user.
  * - delegated: working on a task the orchestrator delegated (no delegation, no model changes).
  * - summary: the orchestrator reporting finished delegated tasks back to the user.
+ * - routine: a scheduled routine running without the user present.
  */
-export type TurnMode = "chat" | "delegated" | "summary";
+export type TurnMode = "chat" | "delegated" | "summary" | "routine";
 
 export type TurnConversation = {
   id: string;
@@ -55,6 +60,8 @@ export type TurnOptions = {
   delegatedBy?: string;
   /** Aborts the turn once its cost exceeds this amount. */
   costLimitUsd?: number;
+  /** Name of the routine being run (routine mode). */
+  routineName?: string;
 };
 
 export type TurnResult = { content: string; costUsd: number; error?: string };
@@ -151,6 +158,8 @@ function systemPrompt(opts: {
   memories: MemoryRow[];
   conversationSummary: string;
   delegatedBy?: string;
+  routineName?: string;
+  canSuggestRoutine: boolean;
 }) {
   const { agent, mode } = opts;
   return [
@@ -171,6 +180,10 @@ function systemPrompt(opts: {
 ${opts.conversationSummary}`,
     mode === "delegated" &&
       `You are working on a task delegated to you by ${opts.delegatedBy ?? "the orchestrator"} (the message prefixed with their name). Do the work with your tools, then reply with a concise report of what you did and the result. You cannot delegate work to others.`,
+    mode === "routine" &&
+      `The scheduled routine "${opts.routineName ?? ""}" is running now (details in the last message). The user is probably not watching: do the work with your tools, then post a short report of the results. Approvals, if needed, will wait for the user.`,
+    opts.canSuggestRoutine &&
+      "Routines: when the user asks for something to happen regularly (every morning, every Monday…), use suggest_routine; it is only enabled after the user confirms.",
     mode === "summary" &&
       "Delegated tasks you started have finished (details below). Give the user a short, clear summary of the results and anything that still needs their attention. Do not delegate again.",
     opts.conversationType === "group" &&
@@ -206,14 +219,6 @@ async function buildHistory(conversationId: string, agent: AgentRow, names: Map<
   });
 }
 
-export async function saveMessage(values: typeof schema.messages.$inferInsert) {
-  const [row] = await db.insert(schema.messages).values(values).returning();
-  await db
-    .update(schema.conversations)
-    .set({ updatedAt: new Date() })
-    .where(eq(schema.conversations.id, values.conversationId));
-  return toMessageDto(row);
-}
 
 export async function changeModel(agent: AgentRow, conversationId: string, modelId: string, emit: Emit) {
   const model = await findModel(modelId);
@@ -313,6 +318,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
   // Preferences come from talking with the user, so proposals are only offered in chat mode.
   const canPropose = supportsTools && mode === "chat";
   const canRemember = supportsTools && mode !== "summary";
+  const canSuggestRoutine = supportsTools && mode === "chat";
   const memories = await listMemories(agent.id);
   const [conversationRow] = await db
     .select({ summary: schema.conversations.summary })
@@ -326,6 +332,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         ...(canDelegate ? [delegateTool(team.map((m) => m.name))] : []),
         ...(canPropose ? [PROPOSE_INSTRUCTIONS_TOOL] : []),
         ...(canRemember ? MEMORY_TOOLS : []),
+        ...(canSuggestRoutine ? [SUGGEST_ROUTINE_TOOL] : []),
       ]
     : [];
 
@@ -346,6 +353,8 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         memories,
         conversationSummary: conversationRow?.summary ?? "",
         delegatedBy: opts.delegatedBy,
+        routineName: opts.routineName,
+        canSuggestRoutine,
       }),
     },
     ...(await buildHistory(conversationId, agent, conversation.names)),
@@ -437,6 +446,10 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
               ? `Model changed to ${change.model.id}. Confirm this briefly to the user.`
               : `Failed: ${change.reason} Tell the user and suggest they check the ID.`;
           }
+        } else if (call.function.name === "suggest_routine" && canSuggestRoutine) {
+          const suggestion = await suggestRoutine(agent, conversationId, args);
+          if (suggestion.card) emit({ type: "message", message: suggestion.card });
+          result = suggestion.toolResult;
         } else if (MEMORY_TOOL_NAMES.has(call.function.name) && canRemember) {
           const memory = await executeMemoryTool(agent, conversationId, call.function.name, args, memories);
           if (memory.message) emit({ type: "message", message: memory.message });
