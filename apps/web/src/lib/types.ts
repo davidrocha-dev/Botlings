@@ -19,6 +19,7 @@ export type Agent = {
 export type MessageAuthor = { type: "user" } | { type: "agent"; agentId: string };
 
 export type TaskStatus = "running" | "completed" | "failed" | "cancelled";
+export type ProposalStatus = "pending" | "accepted" | "rejected" | "stale";
 
 export type Message = {
   id: string;
@@ -26,7 +27,7 @@ export type Message = {
   author: MessageAuthor;
   text: string;
   createdAt: number;
-  kind: "text" | "event" | "error" | "tool" | "task";
+  kind: "text" | "event" | "error" | "tool" | "task" | "proposal";
   model?: string | null;
   costUsd?: number | null;
   metadata?: {
@@ -39,6 +40,11 @@ export type Message = {
     taskStatus?: TaskStatus;
     taskResult?: string;
     taskError?: string;
+    proposalId?: string;
+    proposalStatus?: ProposalStatus;
+    proposalBefore?: string;
+    proposalAfter?: string;
+    proposalReason?: string;
   } | null;
   /** True while the reply is still streaming. */
   streaming?: boolean;

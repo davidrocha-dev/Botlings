@@ -115,7 +115,15 @@ export type MessageMetadata = {
   taskStatus?: TaskStatus;
   taskResult?: string;
   taskError?: string;
+  /** Instruction-change proposals (kind "proposal"). */
+  proposalId?: string;
+  proposalStatus?: ProposalStatus;
+  proposalBefore?: string;
+  proposalAfter?: string;
+  proposalReason?: string;
 };
+
+export type ProposalStatus = "pending" | "accepted" | "rejected" | "stale";
 
 export const messages = pgTable(
   "messages",
@@ -126,7 +134,7 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     authorType: text("author_type", { enum: ["user", "agent"] }).notNull(),
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
-    kind: text("kind", { enum: ["text", "event", "error", "tool", "task"] }).notNull().default("text"),
+    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal"] }).notNull().default("text"),
     content: text("content").notNull(),
     model: text("model"),
     promptTokens: integer("prompt_tokens"),
@@ -172,6 +180,34 @@ export const tasks = pgTable(
     completedAt: timestamp("completed_at", { withTimezone: true }),
   },
   (t) => [index("tasks_request_idx").on(t.requestId), index("tasks_owner_status_idx").on(t.ownerId, t.status)],
+);
+
+/**
+ * An agent's proposed change to its own instructions. Never applied by the agent: only when the
+ * owner accepts, and only if the instructions are still exactly `before`.
+ */
+export const instructionProposals = pgTable(
+  "instruction_proposals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    cardMessageId: uuid("card_message_id"),
+    before: text("before").notNull(),
+    after: text("after").notNull(),
+    reason: text("reason").notNull().default(""),
+    status: text("status", { enum: ["pending", "accepted", "rejected", "stale"] }).notNull().default("pending"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [index("instruction_proposals_agent_status_idx").on(t.agentId, t.status)],
 );
 
 /** Agent computers whose deletion must still happen (the agent row is already gone). */

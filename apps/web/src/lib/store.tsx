@@ -25,6 +25,8 @@ type StoreValue = {
   markRead: (conversationId: string) => void;
   addAgent: (agent: Agent, conversation: Conversation) => void;
   upsertAgent: (agent: Agent) => void;
+  /** Adds or replaces a message (e.g. a card whose status changed). */
+  applyMessage: (message: Message) => void;
   /** Drops a deleted agent, its removed conversations, and its group memberships. */
   removeAgent: (agentId: string, removedConversationIds: string[]) => void;
 };
@@ -258,6 +260,7 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       addAgent,
       upsertAgent,
       removeAgent,
+      applyMessage: appendMessage,
     }),
     [
       initial.user,
@@ -276,6 +279,7 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       addAgent,
       upsertAgent,
       removeAgent,
+      appendMessage,
     ],
   );
 

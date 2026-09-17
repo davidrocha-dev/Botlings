@@ -13,6 +13,7 @@ import {
 } from "@/server/openrouter";
 import { dockerAvailable, getComputer } from "@/server/computers/manager";
 import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
+import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
 import type { ChatStreamEvent } from "@/lib/types";
 
 export type AgentRow = typeof schema.agents.$inferSelect;
@@ -139,15 +140,21 @@ function systemPrompt(opts: {
   hasComputer: boolean;
   team: TeamMember[];
   canDelegate: boolean;
+  canPropose: boolean;
   delegatedBy?: string;
 }) {
   const { agent, mode } = opts;
   return [
     `You are ${agent.name}, a Botling — an AI agent in the user's personal crew.`,
     agent.role && `Your role: ${agent.role}`,
-    agent.prompt && `Instructions from the user:\n${agent.prompt}`,
+    agent.prompt &&
+      (opts.canPropose
+        ? `Your saved instructions from the user (the only text propose_instructions_update may change), between the markers:\n<<<INSTRUCTIONS\n${agent.prompt}\nINSTRUCTIONS>>>`
+        : `Instructions from the user:\n${agent.prompt}`),
     agent.isOrchestrator && teamSection(opts.team),
     opts.canDelegate && DELEGATION_GUIDE,
+    opts.canPropose && !agent.prompt.trim() && "Your saved instructions are currently empty.",
+    opts.canPropose && PROPOSAL_GUIDE,
     mode === "delegated" &&
       `You are working on a task delegated to you by ${opts.delegatedBy ?? "the orchestrator"} (the message prefixed with their name). Do the work with your tools, then reply with a concise report of what you did and the result. You cannot delegate work to others.`,
     mode === "summary" &&
@@ -223,12 +230,15 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
     supportsTools && mode !== "summary" && (await dockerAvailable()) && (await getComputer(agent.id)).status !== "no_image";
   const team = await loadTeam(agent);
   const canDelegate = supportsTools && mode === "chat" && agent.isOrchestrator && !!opts.onDelegate && team.length > 0;
+  // Preferences come from talking with the user, so proposals are only offered in chat mode.
+  const canPropose = supportsTools && mode === "chat";
 
   const tools = supportsTools
     ? [
         ...(mode === "chat" && opts.userText ? [SET_MODEL_TOOL] : []),
         ...(computerReady ? COMPUTER_TOOLS : []),
         ...(canDelegate ? [delegateTool(team.map((m) => m.name))] : []),
+        ...(canPropose ? [PROPOSE_INSTRUCTIONS_TOOL] : []),
       ]
     : [];
 
@@ -243,6 +253,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         hasComputer: computerReady,
         team,
         canDelegate,
+        canPropose,
         delegatedBy: opts.delegatedBy,
       }),
     },
@@ -327,6 +338,11 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
               ? `Model changed to ${change.model.id}. Confirm this briefly to the user.`
               : `Failed: ${change.reason} Tell the user and suggest they check the ID.`;
           }
+        } else if (call.function.name === "propose_instructions_update" && canPropose) {
+          const proposal = await createProposal(agent, conversationId, args);
+          for (const stale of proposal.staleCards ?? []) emit({ type: "message", message: stale });
+          if (proposal.card) emit({ type: "message", message: proposal.card });
+          result = proposal.toolResult;
         } else if (call.function.name === "delegate_task" && canDelegate && opts.onDelegate) {
           result = await opts.onDelegate({
             agentName: String(args.agent_name ?? ""),

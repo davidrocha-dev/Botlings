@@ -149,6 +149,26 @@ const en = {
     commandPlaceholder: "Type a command…",
     run: "Run",
   },
+  proposals: {
+    title: "Wants to update its instructions",
+    reason: "Why",
+    before: "Current",
+    after: "Proposed",
+    accept: "Accept",
+    reject: "Decline",
+    emptyBefore: "(no instructions yet)",
+    status: {
+      pending: "Waiting for you",
+      accepted: "Accepted — instructions updated",
+      rejected: "Declined",
+      stale: "Outdated — the instructions changed or a newer proposal replaced it",
+    },
+    errors: {
+      instructions_changed: "The instructions changed since this was proposed, so it wasn't applied.",
+      already_decided: "This proposal was already decided.",
+      generic: "Something went wrong. Try again.",
+    },
+  },
   tasks: {
     delegatedTo: "Delegated to {name}",
     unknownAgent: "a Botling",
@@ -331,6 +351,26 @@ const pt: Dictionary = {
     terminalHint: "Corre comandos no computador do agente (em ~/workspace). Para programas interativos, usa o Terminal no ecrã dele.",
     commandPlaceholder: "Escreve um comando…",
     run: "Correr",
+  },
+  proposals: {
+    title: "Quer atualizar as instruções",
+    reason: "Porquê",
+    before: "Atuais",
+    after: "Propostas",
+    accept: "Aceitar",
+    reject: "Recusar",
+    emptyBefore: "(ainda sem instruções)",
+    status: {
+      pending: "À espera da tua decisão",
+      accepted: "Aceite — instruções atualizadas",
+      rejected: "Recusada",
+      stale: "Desatualizada — as instruções mudaram ou foi substituída por outra proposta",
+    },
+    errors: {
+      instructions_changed: "As instruções mudaram desde esta proposta, por isso não foi aplicada.",
+      already_decided: "Esta proposta já foi decidida.",
+      generic: "Algo correu mal. Tenta de novo.",
+    },
   },
   tasks: {
     delegatedTo: "Delegado a {name}",
