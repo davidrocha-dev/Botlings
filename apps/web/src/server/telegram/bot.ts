@@ -360,6 +360,9 @@ const telegramChannel: NotificationChannel = async (userId, event, ctx) => {
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
+const START_RETRIES = 5;
+const START_RETRY_MS = 15_000;
+
 async function poll() {
   let offset = 0;
   while (state.running) {
@@ -389,7 +392,7 @@ async function poll() {
 }
 
 /** Starts the bot when TELEGRAM_BOT_TOKEN is set. Safe to call more than once. */
-export async function startTelegramBot() {
+export async function startTelegramBot(attempt = 1) {
   registerNotificationChannel("telegram", telegramChannel);
   if (state.running || !telegramToken()) return;
   state.running = true;
@@ -435,8 +438,19 @@ export async function startTelegramBot() {
     });
     console.log(`[telegram] bot @${state.username} is running`);
   } catch (error) {
-    console.error("[telegram] could not start:", error instanceof Error ? error.message : error);
+    const message = error instanceof Error ? error.message : String(error);
     state.running = false;
+    // A bad token is final; anything else (no network yet at boot) is worth retrying.
+    if (error instanceof TelegramError && error.code === 401) {
+      console.error("[telegram] TELEGRAM_BOT_TOKEN was rejected; the bot is off.");
+      return;
+    }
+    if (attempt < START_RETRIES) {
+      console.warn(`[telegram] could not start (${message}); retrying in ${START_RETRY_MS / 1000}s`);
+      await sleep(START_RETRY_MS);
+      return startTelegramBot(attempt + 1);
+    }
+    console.error("[telegram] could not start:", message);
     return;
   }
   void poll();
