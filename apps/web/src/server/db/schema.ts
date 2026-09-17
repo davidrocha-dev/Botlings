@@ -67,6 +67,8 @@ export const agents = pgTable(
     model: text("model").notNull(),
     appearance: jsonb("appearance").$type<BotlingAppearance>().notNull(),
     isOrchestrator: boolean("is_orchestrator").notNull().default(false),
+    /** ask_always: every action on the computer needs approval; ask_sensitive: only risky ones. */
+    autonomy: text("autonomy", { enum: ["ask_always", "ask_sensitive", "autonomous"] }).notNull().default("ask_sensitive"),
     ...timestamps,
   },
   (t) => [index("agents_owner_idx").on(t.ownerId)],
@@ -121,7 +123,16 @@ export type MessageMetadata = {
   proposalBefore?: string;
   proposalAfter?: string;
   proposalReason?: string;
+  /** Approval requests (kind "approval"). */
+  approvalId?: string;
+  approvalStatus?: ApprovalStatus;
+  approvalCategory?: string;
+  approvalTool?: string;
+  approvalDetail?: string;
+  approvalAlwaysAllowed?: boolean;
 };
+
+export type ApprovalStatus = "pending" | "approved" | "denied" | "expired";
 
 export type ProposalStatus = "pending" | "accepted" | "rejected" | "stale";
 
@@ -134,7 +145,9 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     authorType: text("author_type", { enum: ["user", "agent"] }).notNull(),
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
-    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal"] }).notNull().default("text"),
+    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal", "approval"] })
+      .notNull()
+      .default("text"),
     content: text("content").notNull(),
     model: text("model"),
     promptTokens: integer("prompt_tokens"),
@@ -208,6 +221,46 @@ export const instructionProposals = pgTable(
     decidedAt: timestamp("decided_at", { withTimezone: true }),
   },
   (t) => [index("instruction_proposals_agent_status_idx").on(t.agentId, t.status)],
+);
+
+/** An action an agent wants to take that is waiting for (or received) the user's decision. */
+export const approvals = pgTable(
+  "approvals",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    conversationId: uuid("conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    cardMessageId: uuid("card_message_id"),
+    tool: text("tool").notNull(),
+    category: text("category").notNull(),
+    /** Human-readable description of the action (already free of secret values). */
+    detail: text("detail").notNull(),
+    status: text("status", { enum: ["pending", "approved", "denied", "expired"] }).notNull().default("pending"),
+    alwaysAllowed: boolean("always_allowed").notNull().default(false),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+  },
+  (t) => [index("approvals_owner_status_idx").on(t.ownerId, t.status)],
+);
+
+/** "Always allow" decisions: this agent may perform this category of action without asking. */
+export const approvalRules = pgTable(
+  "approval_rules",
+  {
+    agentId: uuid("agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [primaryKey({ columns: [t.agentId, t.category] })],
 );
 
 /** Agent computers whose deletion must still happen (the agent row is already gone). */

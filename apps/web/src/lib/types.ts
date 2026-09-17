@@ -10,6 +10,7 @@ export type Agent = {
   model: string;
   appearance: BotlingAppearance;
   isOrchestrator: boolean;
+  autonomy: Autonomy;
   /** Live state; derived on the client from in-flight requests for now. */
   status: AgentStatus;
   spendTodayUsd: number;
@@ -20,6 +21,8 @@ export type MessageAuthor = { type: "user" } | { type: "agent"; agentId: string 
 
 export type TaskStatus = "running" | "completed" | "failed" | "cancelled";
 export type ProposalStatus = "pending" | "accepted" | "rejected" | "stale";
+export type ApprovalStatus = "pending" | "approved" | "denied" | "expired";
+export type Autonomy = "ask_always" | "ask_sensitive" | "autonomous";
 
 export type Message = {
   id: string;
@@ -27,7 +30,7 @@ export type Message = {
   author: MessageAuthor;
   text: string;
   createdAt: number;
-  kind: "text" | "event" | "error" | "tool" | "task" | "proposal";
+  kind: "text" | "event" | "error" | "tool" | "task" | "proposal" | "approval";
   model?: string | null;
   costUsd?: number | null;
   metadata?: {
@@ -45,6 +48,12 @@ export type Message = {
     proposalBefore?: string;
     proposalAfter?: string;
     proposalReason?: string;
+    approvalId?: string;
+    approvalStatus?: ApprovalStatus;
+    approvalCategory?: string;
+    approvalTool?: string;
+    approvalDetail?: string;
+    approvalAlwaysAllowed?: boolean;
   } | null;
   /** True while the reply is still streaming. */
   streaming?: boolean;

@@ -23,6 +23,7 @@ export function toAgentDto(row: AgentRow, usage?: { cost: number; tokens: number
     model: row.model,
     appearance: row.appearance,
     isOrchestrator: row.isOrchestrator,
+    autonomy: row.autonomy,
     status: "idle",
     spendTodayUsd: usage?.cost ?? 0,
     tokensToday: usage?.tokens ?? 0,
@@ -146,6 +147,7 @@ export type NewAgentInput = {
   prompt: string;
   model: string;
   appearance: BotlingAppearance;
+  autonomy?: "ask_always" | "ask_sensitive" | "autonomous";
   isOrchestrator?: boolean;
   greeting?: string;
 };
@@ -168,6 +170,7 @@ export async function createAgent(ownerId: string, input: NewAgentInput) {
         prompt: input.prompt,
         model: input.model,
         appearance: input.appearance,
+        autonomy: input.autonomy ?? "ask_sensitive",
         isOrchestrator: input.isOrchestrator ?? false,
       })
       .returning();

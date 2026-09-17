@@ -13,12 +13,14 @@ const fields = {
   prompt: z.string().trim().max(8_000),
   model: z.string().trim().min(3).max(200),
   appearance: appearanceSchema,
+  autonomy: z.enum(["ask_always", "ask_sensitive", "autonomous"]),
 };
 
 export const agentInputSchema = z.object({
   ...fields,
   role: fields.role.default(""),
   prompt: fields.prompt.default(""),
+  autonomy: fields.autonomy.default("ask_sensitive"),
 });
 
 /**

@@ -4,4 +4,6 @@ export async function register() {
   await runMigrations();
   const { failInterruptedTasks } = await import("./server/chat/tasks");
   await failInterruptedTasks().catch((error) => console.error("[tasks] startup cleanup", error));
+  const { expireStaleApprovals } = await import("./server/approvals/approvals");
+  await expireStaleApprovals().catch((error) => console.error("[approvals] startup cleanup", error));
 }

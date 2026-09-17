@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, Loader2, Shuffle } from "lucide-react";
 import { AgentGenerator } from "./agent-generator";
+import { ApprovalRules, AutonomyPicker } from "./autonomy-section";
 import { ModelPicker } from "./model-picker";
 import { BotlingAvatar } from "@/components/avatar/botling-avatar";
 import {
@@ -18,7 +19,7 @@ import {
 } from "@/components/avatar/botling-options";
 import { useI18n } from "@/lib/i18n/client";
 import { useStore } from "@/lib/store";
-import type { Agent } from "@/lib/types";
+import type { Agent, Autonomy } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -54,6 +55,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
   const [role, setRole] = useState(agent?.role ?? "");
   const [prompt, setPrompt] = useState(agent?.prompt ?? "");
   const [model, setModel] = useState(agent?.model ?? defaultModel);
+  const [autonomy, setAutonomy] = useState<Autonomy>(agent?.autonomy ?? "ask_sensitive");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<keyof typeof t.agent.errors | null>(null);
 
@@ -69,7 +71,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
       const res = await fetch(editing ? `/api/agents/${agent.id}` : "/api/agents", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, role, prompt, model, appearance }),
+        body: JSON.stringify({ name, role, prompt, model, appearance, autonomy }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -268,6 +270,12 @@ export function AgentForm({ agent }: { agent?: Agent }) {
             <Section title={t.agent.model}>
               <ModelPicker value={model} onChange={setModel} />
               <p className="text-xs text-muted">{t.agent.modelHint}</p>
+            </Section>
+
+            <Section title={t.agent.autonomy.title}>
+              <AutonomyPicker value={autonomy} onChange={setAutonomy} />
+              <p className="text-xs text-muted">{t.agent.autonomy.hint}</p>
+              {editing && <ApprovalRules agentId={agent.id} />}
             </Section>
 
             <div className="pb-safe sticky bottom-0 -mx-4 bg-gradient-to-t from-bg via-bg to-transparent px-4 pt-6 pb-4 md:static md:mx-0 md:bg-none md:p-0">

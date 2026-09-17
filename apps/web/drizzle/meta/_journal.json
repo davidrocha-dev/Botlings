@@ -29,6 +29,13 @@
       "when": 1789655026883,
       "tag": "0003_instruction_proposals",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789656990565,
+      "tag": "0004_approvals",
+      "breakpoints": true
     }
   ]
 }

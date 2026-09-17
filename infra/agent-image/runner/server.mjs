@@ -175,6 +175,36 @@ async function locate(page, ref) {
   return locator.first();
 }
 
+/**
+ * Describes an element before acting on it, so the Botlings server can decide whether the action
+ * needs the user's approval (e.g. a "Place order" button or a password field).
+ */
+async function browserDescribe({ ref }) {
+  const page = await getPage();
+  const el = await locate(page, ref);
+  const info = await el.evaluate((node) => {
+    const form = node.closest("form");
+    const text = (s) => (s || "").replace(/\s+/g, " ").trim().slice(0, 120);
+    return {
+      tag: node.tagName.toLowerCase(),
+      type: (node.getAttribute("type") || "").toLowerCase(),
+      label: text(
+        node.getAttribute("aria-label") ||
+          node.innerText ||
+          node.getAttribute("value") ||
+          node.getAttribute("placeholder") ||
+          node.getAttribute("title") ||
+          node.getAttribute("name"),
+      ),
+      autocomplete: (node.getAttribute("autocomplete") || "").toLowerCase(),
+      name: text(node.getAttribute("name") || node.getAttribute("id")),
+      formAction: form ? text(form.getAttribute("action")) : "",
+      formHasPassword: form ? !!form.querySelector("input[type=password]") : false,
+    };
+  });
+  return { ...info, url: page.url() };
+}
+
 async function browserClick({ ref }) {
   const page = await getPage();
   await (await locate(page, ref)).click({ timeout: 10_000 });
@@ -202,6 +232,7 @@ const routes = {
   "POST /browser/open": browserOpen,
   "POST /browser/show": browserShow,
   "POST /browser/snapshot": browserSnapshot,
+  "POST /browser/describe": browserDescribe,
   "POST /browser/click": browserClick,
   "POST /browser/type": browserType,
 };

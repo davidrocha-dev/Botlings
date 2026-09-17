@@ -9,6 +9,7 @@ import { formatMessageTime } from "@/lib/format";
 import { useStore } from "@/lib/store";
 import type { Conversation, Message } from "@/lib/types";
 import { cn } from "@/lib/cn";
+import { ApprovalCard } from "./approval-card";
 import { ProposalCard } from "./proposal-card";
 import { TaskCard } from "./task-card";
 
@@ -160,6 +161,7 @@ export function MessageList({ conversation }: { conversation: Conversation }) {
             if (message.kind === "tool") return <ToolRow key={message.id} message={message} />;
             if (message.kind === "task") return <TaskCard key={message.id} message={message} />;
             if (message.kind === "proposal") return <ProposalCard key={message.id} message={message} />;
+            if (message.kind === "approval") return <ApprovalCard key={message.id} message={message} />;
 
             const prev = list[index - 1];
             const next = list[index + 1];

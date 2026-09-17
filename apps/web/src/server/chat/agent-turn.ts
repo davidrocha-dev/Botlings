@@ -11,7 +11,9 @@ import {
   type ToolDefinition,
   type Usage,
 } from "@/server/openrouter";
-import { dockerAvailable, getComputer } from "@/server/computers/manager";
+import { callRunner, dockerAvailable, getComputer } from "@/server/computers/manager";
+import { isAlwaysAllowed, requestApproval } from "@/server/approvals/approvals";
+import { classifyAction, type ElementInfo } from "@/server/approvals/classify";
 import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
 import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
 import type { ChatStreamEvent } from "@/lib/types";
@@ -130,7 +132,7 @@ const DELEGATION_GUIDE =
   "Delegation: handle simple things yourself (questions, quick answers, small tasks you can do well). Use delegate_task only when a crew member is clearly better suited for the work, e.g. it matches their role or needs their computer. When you delegate, tell the user briefly who is working on it; the result will come back to you and you will then summarise it.";
 
 const SAFETY_GUIDE =
-  "Sensitive actions — sending emails or messages on the user's behalf, purchases or payments, publishing content, deleting important data, changing account settings — must not be done without the user's approval. If the task needs one, stop before doing it and explain exactly what approval is needed.";
+  "Risky actions on your computer (purchases, sending or publishing, deleting, pushing code, accepting terms…) automatically pause for the user's approval; just attempt them normally when the task requires it. If an action is denied, do not retry it or find a workaround — tell the user. You can never type passwords, codes or card details: ask the user to take control of the screen for those steps."
 
 function systemPrompt(opts: {
   agent: AgentRow;
@@ -216,6 +218,51 @@ export async function changeModel(agent: AgentRow, conversationId: string, model
   });
   emit({ type: "agent", agent: await getAgentDto(updated) });
   return { ok: true as const, model };
+}
+
+/**
+ * Server-side gate for computer actions: blocks credentials entry outright and pauses sensitive
+ * actions until the user approves them (unless an "always allow" rule exists for the agent).
+ */
+async function gateComputerAction(opts: {
+  agent: AgentRow;
+  conversationId: string;
+  tool: string;
+  args: Record<string, unknown>;
+  emit: Emit;
+  signal: AbortSignal;
+}): Promise<{ allowed: true } | { allowed: false; result: string }> {
+  const { agent, tool, args } = opts;
+  let element: ElementInfo | null = null;
+  if (tool === "browser_click" || tool === "browser_type") {
+    element = await callRunner<ElementInfo>(agent.id, "/browser/describe", { ref: args.ref }, 30_000).catch(() => null);
+  }
+
+  const verdict = classifyAction({ tool, args, autonomy: agent.autonomy, element });
+  if (verdict.decision === "allow") return { allowed: true };
+  if (verdict.decision === "block") {
+    return { allowed: false, result: `Blocked: ${verdict.reason} Ask the user to do this step themselves (they can take control of the screen).` };
+  }
+  if (await isAlwaysAllowed(agent.id, verdict.category)) return { allowed: true };
+
+  const status = await requestApproval({
+    ownerId: agent.ownerId,
+    agentId: agent.id,
+    conversationId: opts.conversationId,
+    tool,
+    category: verdict.category,
+    detail: verdict.detail,
+    emit: opts.emit,
+    signal: opts.signal,
+  });
+  if (status === "approved") return { allowed: true };
+  return {
+    allowed: false,
+    result:
+      status === "denied"
+        ? "The user denied this action. Do not retry it or work around it; tell the user and ask how they want to proceed."
+        : "No decision was made in time, so the action was not performed. Tell the user it is waiting for their approval.",
+  };
 }
 
 /** Runs one agent turn: prompt + tools + streaming, persisting the resulting messages. */
@@ -310,24 +357,29 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         } catch {}
 
         if (COMPUTER_TOOL_NAMES.has(call.function.name) && computerReady) {
-          emit({ type: "typing", agentId: agent.id });
-          emit({
-            type: "message",
-            message: await saveMessage({
-              conversationId,
-              authorType: "agent",
-              agentId: agent.id,
-              kind: "tool",
-              content: describeToolCall(call.function.name, args),
-              metadata: { tool: call.function.name },
-            }),
-          });
-          try {
-            result = await executeComputerTool(agent.id, call.function.name, args);
-          } catch (error) {
-            result = `Tool failed: ${error instanceof Error ? error.message : String(error)}`;
+          const gate = await gateComputerAction({ agent, conversationId, tool: call.function.name, args, emit, signal });
+          if (gate.allowed) {
+            emit({ type: "typing", agentId: agent.id });
+            emit({
+              type: "message",
+              message: await saveMessage({
+                conversationId,
+                authorType: "agent",
+                agentId: agent.id,
+                kind: "tool",
+                content: describeToolCall(call.function.name, args),
+                metadata: { tool: call.function.name },
+              }),
+            });
+            try {
+              result = await executeComputerTool(agent.id, call.function.name, args);
+            } catch (error) {
+              result = `Tool failed: ${error instanceof Error ? error.message : String(error)}`;
+            }
+            emit({ type: "computer", agentId: agent.id });
+          } else {
+            result = gate.result;
           }
-          emit({ type: "computer", agentId: agent.id });
         } else if (call.function.name === "set_model" && mode === "chat" && opts.userText) {
           const modelId = String(args.model_id ?? "");
           if (!userAskedForModelChange(opts.userText, modelId)) {
