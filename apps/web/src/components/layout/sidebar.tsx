@@ -72,6 +72,8 @@ export function Sidebar() {
               : last
                 ? last.kind === "event"
                   ? `${t.chat.modelChanged}: ${last.metadata?.toModel ?? ""}`
+                  : last.kind === "task"
+                  ? `${t.tasks.status[last.metadata?.taskStatus ?? "running"]}: ${last.text}`
                   : last.kind === "tool"
                   ? `${t.tools[last.metadata?.tool as keyof typeof t.tools] ?? ""} ${last.text}`
                   : `${conversation.type === "group" && lastAuthor ? `${lastAuthor}: ` : ""}${last.text}`

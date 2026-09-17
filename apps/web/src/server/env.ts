@@ -44,6 +44,10 @@ const schema = z.object({
     .enum(["true", "false"])
     .default("false")
     .transform((v) => v === "true"),
+  /** Delegation limits (orchestrator → other agents). */
+  BOTLINGS_MAX_DELEGATIONS_PER_REQUEST: z.coerce.number().int().min(0).default(3),
+  BOTLINGS_TASK_MAX_COST_USD: z.coerce.number().min(0).default(0.05),
+  BOTLINGS_TASK_TIMEOUT_MINUTES: z.coerce.number().min(1).default(10),
   /** Port of the authenticated screen gateway (src/gateway/server.ts). */
   BOTLINGS_GATEWAY_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   NODE_ENV: z.string().default("development"),

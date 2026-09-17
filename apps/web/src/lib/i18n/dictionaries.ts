@@ -149,6 +149,15 @@ const en = {
     commandPlaceholder: "Type a command…",
     run: "Run",
   },
+  tasks: {
+    delegatedTo: "Delegated to {name}",
+    unknownAgent: "a Botling",
+    status: { running: "Working", completed: "Done", failed: "Error", cancelled: "Cancelled" },
+    cancel: "Cancel",
+    openChat: "Open {name}'s chat",
+    showResult: "Show result",
+    showError: "Show error",
+  },
   tools: {
     run_command: "Terminal",
     read_file: "Read file",
@@ -322,6 +331,15 @@ const pt: Dictionary = {
     terminalHint: "Corre comandos no computador do agente (em ~/workspace). Para programas interativos, usa o Terminal no ecrã dele.",
     commandPlaceholder: "Escreve um comando…",
     run: "Correr",
+  },
+  tasks: {
+    delegatedTo: "Delegado a {name}",
+    unknownAgent: "um Botling",
+    status: { running: "A trabalhar", completed: "Concluído", failed: "Erro", cancelled: "Cancelado" },
+    cancel: "Cancelar",
+    openChat: "Abrir conversa do {name}",
+    showResult: "Ver resultado",
+    showError: "Ver erro",
   },
   tools: {
     run_command: "Terminal",

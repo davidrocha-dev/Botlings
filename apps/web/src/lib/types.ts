@@ -18,16 +18,28 @@ export type Agent = {
 
 export type MessageAuthor = { type: "user" } | { type: "agent"; agentId: string };
 
+export type TaskStatus = "running" | "completed" | "failed" | "cancelled";
+
 export type Message = {
   id: string;
   conversationId: string;
   author: MessageAuthor;
   text: string;
   createdAt: number;
-  kind: "text" | "event" | "error" | "tool";
+  kind: "text" | "event" | "error" | "tool" | "task";
   model?: string | null;
   costUsd?: number | null;
-  metadata?: { fromModel?: string; toModel?: string; errorCode?: number; tool?: string } | null;
+  metadata?: {
+    fromModel?: string;
+    toModel?: string;
+    errorCode?: number;
+    tool?: string;
+    taskId?: string;
+    targetAgentId?: string;
+    taskStatus?: TaskStatus;
+    taskResult?: string;
+    taskError?: string;
+  } | null;
   /** True while the reply is still streaming. */
   streaming?: boolean;
 };

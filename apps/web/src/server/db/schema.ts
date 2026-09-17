@@ -102,11 +102,19 @@ export const conversationMembers = pgTable(
   (t) => [primaryKey({ columns: [t.conversationId, t.agentId] })],
 );
 
+export type TaskStatus = "running" | "completed" | "failed" | "cancelled";
+
 export type MessageMetadata = {
   fromModel?: string;
   toModel?: string;
   errorCode?: number;
   tool?: string;
+  /** Task cards (kind "task"): a snapshot kept in sync with the tasks table. */
+  taskId?: string;
+  targetAgentId?: string;
+  taskStatus?: TaskStatus;
+  taskResult?: string;
+  taskError?: string;
 };
 
 export const messages = pgTable(
@@ -118,7 +126,7 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     authorType: text("author_type", { enum: ["user", "agent"] }).notNull(),
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
-    kind: text("kind", { enum: ["text", "event", "error", "tool"] }).notNull().default("text"),
+    kind: text("kind", { enum: ["text", "event", "error", "tool", "task"] }).notNull().default("text"),
     content: text("content").notNull(),
     model: text("model"),
     promptTokens: integer("prompt_tokens"),
@@ -131,6 +139,39 @@ export const messages = pgTable(
     index("messages_conversation_created_idx").on(t.conversationId, t.createdAt),
     index("messages_agent_created_idx").on(t.agentId, t.createdAt),
   ],
+);
+
+/**
+ * Work delegated by the orchestrator to another agent. `requestId` groups the delegations made
+ * while answering one user message, so the orchestrator summarises once they are all finished.
+ */
+export const tasks = pgTable(
+  "tasks",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    requestId: uuid("request_id").notNull(),
+    orchestratorAgentId: uuid("orchestrator_agent_id")
+      .notNull()
+      .references(() => agents.id, { onDelete: "cascade" }),
+    orchestratorConversationId: uuid("orchestrator_conversation_id")
+      .notNull()
+      .references(() => conversations.id, { onDelete: "cascade" }),
+    targetAgentId: uuid("target_agent_id").references(() => agents.id, { onDelete: "set null" }),
+    targetConversationId: uuid("target_conversation_id").references(() => conversations.id, { onDelete: "set null" }),
+    cardMessageId: uuid("card_message_id"),
+    instruction: text("instruction").notNull(),
+    status: text("status", { enum: ["running", "completed", "failed", "cancelled"] }).notNull().default("running"),
+    result: text("result"),
+    error: text("error"),
+    costUsd: numeric("cost_usd", { precision: 14, scale: 8, mode: "number" }).notNull().default(0),
+    summarized: boolean("summarized").notNull().default(false),
+    ...timestamps,
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => [index("tasks_request_idx").on(t.requestId), index("tasks_owner_status_idx").on(t.ownerId, t.status)],
 );
 
 /** Agent computers whose deletion must still happen (the agent row is already gone). */

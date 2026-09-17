@@ -58,15 +58,24 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
     setAgents((list) => (list.some((a) => a.id === agent.id) ? list.map((a) => (a.id === agent.id ? agent : a)) : [...list, agent]));
   }, []);
 
+  /** Adds a message, or replaces it when it already exists (e.g. a task card whose status changed). */
   const appendMessage = useCallback((message: Message) => {
     setMessages((map) => {
       const list = map[message.conversationId];
       if (!list) return map;
-      if (list.some((m) => m.id === message.id)) return map;
-      return { ...map, [message.conversationId]: [...list, message] };
+      const index = list.findIndex((m) => m.id === message.id);
+      if (index === -1) return { ...map, [message.conversationId]: [...list, message] };
+      const next = list.slice();
+      next[index] = message;
+      return { ...map, [message.conversationId]: next };
     });
     setConversations((list) =>
-      list.map((c) => (c.id === message.conversationId ? { ...c, lastMessage: message } : c)),
+      list.map((c) => {
+        if (c.id !== message.conversationId) return c;
+        const isUpdate = c.lastMessage?.id === message.id;
+        const isNewer = !c.lastMessage || message.createdAt >= c.lastMessage.createdAt;
+        return isUpdate || isNewer ? { ...c, lastMessage: message } : c;
+      }),
     );
   }, []);
 
@@ -126,6 +135,45 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
     },
     [appendMessage, upsertAgent],
   );
+
+  // Live updates for background work (delegated tasks, the orchestrator's follow-up summary).
+  const messagesRef = useRef(messagesByConversation);
+  useEffect(() => {
+    messagesRef.current = messagesByConversation;
+  }, [messagesByConversation]);
+
+  useEffect(() => {
+    const source = new EventSource("/api/events");
+    source.onmessage = (raw) => {
+      let data: { conversationId: string; event: ChatStreamEvent };
+      try {
+        data = JSON.parse(raw.data);
+      } catch {
+        return;
+      }
+      const { conversationId, event } = data;
+      handleEvent(conversationId, event);
+
+      const endsTurn = event.type === "agent" || (event.type === "message" && event.message.kind === "error");
+      if (endsTurn) {
+        const agentId = event.type === "agent" ? event.agent.id : event.message.author.type === "agent" ? event.message.author.agentId : null;
+        setTyping((t) => ({ ...t, [conversationId]: null }));
+        setDrafts((d) => ({ ...d, [conversationId]: null }));
+        if (agentId) {
+          setBusyAgents((b) => {
+            const next = { ...b };
+            delete next[agentId];
+            return next;
+          });
+        }
+      }
+      // Unopened conversations get an unread badge for new agent replies.
+      if (event.type === "message" && event.message.kind === "text" && event.message.author.type === "agent" && !messagesRef.current[conversationId]) {
+        setConversations((list) => list.map((c) => (c.id === conversationId ? { ...c, unread: c.unread + 1 } : c)));
+      }
+    };
+    return () => source.close();
+  }, [handleEvent]);
 
   const sendMessage = useCallback(
     async (conversationId: string, text: string) => {
