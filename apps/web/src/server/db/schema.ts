@@ -354,6 +354,19 @@ export const pushSubscriptions = pgTable(
   (t) => [uniqueIndex("push_subscriptions_endpoint_idx").on(t.endpoint), index("push_subscriptions_user_idx").on(t.userId)],
 );
 
+/** A Telegram private chat linked to a Botlings user (one per user). */
+export const telegramLinks = pgTable("telegram_links", {
+  userId: uuid("user_id")
+    .primaryKey()
+    .references(() => users.id, { onDelete: "cascade" }),
+  chatId: text("chat_id").notNull().unique(),
+  username: text("username"),
+  locale: text("locale").notNull().default("en"),
+  /** Agent that receives plain messages; null means the orchestrator. */
+  activeAgentId: uuid("active_agent_id").references(() => agents.id, { onDelete: "set null" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 /** Durable facts an agent keeps across conversations; visible and editable by the owner. */
 export const agentMemories = pgTable(
   "agent_memories",

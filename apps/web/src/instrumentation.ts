@@ -17,5 +17,7 @@ export async function register() {
       conversationId: run.conversationId,
     }),
   );
+  const { startTelegramBot } = await import("./server/telegram/bot");
+  await startTelegramBot().catch((error) => console.error("[telegram] startup", error));
   await startScheduler().catch((error) => console.error("[routines] scheduler", error));
 }

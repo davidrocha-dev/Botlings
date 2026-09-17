@@ -71,6 +71,13 @@
       "when": 1789660005714,
       "tag": "0009_push",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1789660155704,
+      "tag": "0010_telegram",
+      "breakpoints": true
     }
   ]
 }

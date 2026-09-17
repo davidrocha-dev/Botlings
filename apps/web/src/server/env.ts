@@ -40,6 +40,8 @@ const schema = z.object({
   BOTLINGS_LICENSE_PUBLIC_KEY: z.string().optional(),
   /** base64 32-byte key for encrypting secrets; generated into data/secret.key when unset. */
   BOTLINGS_SECRET_KEY: z.string().optional(),
+  /** Telegram bot token from @BotFather; the bot is off when unset. */
+  TELEGRAM_BOT_TOKEN: z.string().optional(),
   /** Web Push keys; generated into data/vapid.json when unset. */
   BOTLINGS_VAPID_PUBLIC_KEY: z.string().optional(),
   BOTLINGS_VAPID_PRIVATE_KEY: z.string().optional(),

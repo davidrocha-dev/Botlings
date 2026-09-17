@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Bell, BellOff, Check, Loader2, Send, Smartphone, TriangleAlert } from "lucide-react";
+import { Bell, BellOff, Check, ExternalLink, Loader2, MessageCircle, Send, Smartphone, TriangleAlert, Unlink } from "lucide-react";
 import { PageHeader } from "@/components/layout/page-header";
 import { useI18n } from "@/lib/i18n/client";
 import { currentSubscription, disablePush, enablePush, pushSupport, type PushSupport } from "@/lib/push";
@@ -209,10 +209,126 @@ export function NotificationsPage() {
                 </div>
                 <p className="px-1 pt-1 text-xs text-subtle">{t.notifications.presenceHint}</p>
               </section>
+
+              <TelegramSection />
             </>
           )}
         </div>
       </div>
     </div>
+  );
+}
+
+type TelegramState = { configured: boolean; running: boolean; botUsername: string | null; linked: { username: string | null } | null };
+
+function TelegramSection() {
+  const { t } = useI18n();
+  const [status, setStatus] = useState<TelegramState | null>(null);
+  const [link, setLink] = useState<{ url: string | null; expiresAt: number } | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    fetch("/api/telegram")
+      .then((res) => res.json())
+      .then(setStatus)
+      .catch(() => {});
+  }, []);
+
+  // While a link is out, watch for the chat to connect.
+  useEffect(() => {
+    if (!link || status?.linked) return;
+    const timer = setInterval(async () => {
+      if (Date.now() > link.expiresAt) {
+        setLink(null);
+        return;
+      }
+      const next = (await (await fetch("/api/telegram")).json()) as TelegramState;
+      setStatus(next);
+      if (next.linked) setLink(null);
+    }, 3000);
+    return () => clearInterval(timer);
+  }, [link, status?.linked]);
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/telegram", { method: "POST" });
+      if (res.ok) setLink(await res.json());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    setBusy(true);
+    try {
+      setStatus(await (await fetch("/api/telegram", { method: "DELETE" })).json());
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!status) return null;
+  return (
+    <section className="space-y-3 rounded-2xl border border-border bg-surface p-4">
+      <div className="flex items-start gap-3">
+        <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <MessageCircle className="size-5" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">
+            {t.notifications.telegram}
+            {status.botUsername && <span className="ml-1.5 text-sm font-normal text-muted">@{status.botUsername}</span>}
+          </p>
+          <p className="text-sm text-muted">
+            {!status.configured
+              ? t.notifications.telegramNotConfigured
+              : !status.running
+                ? t.notifications.telegramNotRunning
+                : status.linked
+                  ? t.notifications.telegramLinked.replace("{user}", status.linked.username ? ` (@${status.linked.username})` : "")
+                  : link
+                    ? t.notifications.telegramWaiting
+                    : t.notifications.telegramHint}
+          </p>
+        </div>
+      </div>
+
+      {status.running && (
+        <div className="flex flex-wrap gap-2">
+          {status.linked ? (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={disconnect}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border-strong px-4 text-sm font-medium hover:bg-surface-2 disabled:opacity-60"
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <Unlink className="size-4" />}
+              {t.notifications.telegramDisconnect}
+            </button>
+          ) : link?.url ? (
+            <a
+              href={link.url}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-medium text-accent-contrast hover:bg-accent-hover"
+            >
+              <ExternalLink className="size-4" />
+              {t.notifications.telegramOpen}
+            </a>
+          ) : (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={connect}
+              className="inline-flex h-9 items-center gap-1.5 rounded-full bg-accent px-4 text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:opacity-60"
+            >
+              {busy ? <Loader2 className="size-4 animate-spin" /> : <MessageCircle className="size-4" />}
+              {t.notifications.telegramConnect}
+            </button>
+          )}
+        </div>
+      )}
+    </section>
   );
 }
