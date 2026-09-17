@@ -18,16 +18,16 @@ Write role and prompt in the same language as the description. No markdown, no c
 export type AgentDraft = z.infer<typeof draftSchema>;
 
 /** Asks the utility model for a draft agent. Returns null when the model output isn't usable. */
-export async function generateAgentDraft(description: string): Promise<{ draft: AgentDraft } | { error: string }> {
+async function draftWith(model: string, description: string): Promise<{ draft: AgentDraft } | { error: string }> {
   let text = "";
   try {
     for await (const event of streamChat({
-      model: env.BOTLINGS_UTILITY_MODEL,
+      model,
       messages: [
         { role: "system", content: SYSTEM },
         { role: "user", content: description },
       ],
-      signal: AbortSignal.timeout(45_000),
+      signal: AbortSignal.timeout(30_000),
     })) {
       if (event.type === "delta") text += event.text;
     }
@@ -41,4 +41,19 @@ export async function generateAgentDraft(description: string): Promise<{ draft: 
     if (result.success) return { draft: result.data };
   } catch {}
   return { error: "generation_failed" };
+}
+
+/**
+ * Asks the utility model(s) for a draft agent. BOTLINGS_UTILITY_MODEL may list several models
+ * (comma-separated, e.g. free ones that are often rate-limited); they are tried in order.
+ */
+export async function generateAgentDraft(description: string): Promise<{ draft: AgentDraft } | { error: string }> {
+  const models = env.BOTLINGS_UTILITY_MODEL.split(",").map((m) => m.trim()).filter(Boolean);
+  let last: { error: string } = { error: "generation_failed" };
+  for (const model of models) {
+    const result = await draftWith(model, description);
+    if ("draft" in result) return result;
+    last = result;
+  }
+  return last;
 }
