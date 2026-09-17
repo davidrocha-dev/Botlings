@@ -37,6 +37,8 @@ const schema = z.object({
   BOTLINGS_UTILITY_MODEL: z
     .string()
     .default("google/gemma-4-31b-it:free,z-ai/glm-5.2:free,nvidia/nemotron-3-super-120b-a12b:free,openrouter/free"),
+  /** Optional cheap model for the group moderator; free models are tried first. */
+  BOTLINGS_MODERATOR_MODEL: z.string().optional(),
   BOTLINGS_LICENSE_PUBLIC_KEY: z.string().optional(),
   /** base64 32-byte key for encrypting secrets; generated into data/secret.key when unset. */
   BOTLINGS_SECRET_KEY: z.string().optional(),

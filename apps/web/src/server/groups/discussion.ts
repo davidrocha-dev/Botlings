@@ -1,9 +1,9 @@
 import { and, desc, eq } from "drizzle-orm";
 import { db, schema } from "@/server/db";
-import type { ChatMessage } from "@/server/openrouter";
+import { streamChat, type ChatMessage } from "@/server/openrouter";
+import { env } from "@/server/env";
 import { completeWithUtilityModel } from "@/server/utility-model";
 import { runAgentTurn, saveMessage, type AgentRow, type Emit, type TurnResult } from "@/server/chat/agent-turn";
-import { isStopped } from "@/server/chat/generations";
 import { beginRequest, createDelegator } from "@/server/chat/tasks";
 
 type GroupRow = typeof schema.conversations.$inferSelect;
@@ -12,12 +12,29 @@ type GroupRow = typeof schema.conversations.$inferSelect;
  * A group round, started by one user message:
  * - @mentions: the mentioned agents answer, in order, once each.
  * - "mentions" mode: the orchestrator (or first member) answers once.
- * - "discussion" mode: a moderator (free utility model) gives the floor to one agent at a time
- *   until the question is settled, or the group's turn / cost limit is reached.
+ * - "discussion" mode: a moderator (free utility model) picks, up front, the short panel of members
+ *   the message actually needs; they reply in that order and the last one wraps up.
+ * Picking the panel once — instead of asking "who's next?" after every reply — keeps rounds short:
+ * weak free models happily keep nominating speakers forever, but they are good at naming who matters.
  * Agents never pick who speaks and never loop on their own.
  */
 
 const TRANSCRIPT_MESSAGES = 16;
+/** Even when the group allows more, a moderator-picked panel stays this small. */
+const MAX_PANEL = 3;
+
+/** One non-streaming completion with a named model (the moderator's paid backup). */
+async function complete(model: string, messages: ChatMessage[]) {
+  let text = "";
+  try {
+    for await (const event of streamChat({ model, messages, signal: AbortSignal.timeout(20_000) })) {
+      if (event.type === "delta") text += event.text;
+    }
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "moderator_failed" } as const;
+  }
+  return text.trim() ? ({ text: text.trim(), model } as const) : ({ error: "empty" } as const);
+}
 
 function mentioned(text: string, members: AgentRow[]) {
   const lower = text.toLowerCase();
@@ -30,7 +47,12 @@ function mentioned(text: string, members: AgentRow[]) {
 
 async function transcript(conversationId: string, since: Date | null, names: Map<string, string>) {
   const rows = await db
-    .select({ authorType: schema.messages.authorType, agentId: schema.messages.agentId, content: schema.messages.content, createdAt: schema.messages.createdAt })
+    .select({
+      authorType: schema.messages.authorType,
+      agentId: schema.messages.agentId,
+      content: schema.messages.content,
+      createdAt: schema.messages.createdAt,
+    })
     .from(schema.messages)
     .where(and(eq(schema.messages.conversationId, conversationId), eq(schema.messages.kind, "text")))
     .orderBy(desc(schema.messages.createdAt))
@@ -43,32 +65,31 @@ async function transcript(conversationId: string, since: Date | null, names: Map
 }
 
 /**
- * Asks the moderator who speaks next. Returns an agent, or null when the discussion is done.
- * If the moderator model is unavailable, the orchestrator (or first member) replies once.
+ * Asks the moderator which members should reply to the user's latest message, in order.
+ * Falls back to a single reply (orchestrator, else first member) when the model is unavailable.
  */
-export async function pickNextSpeaker(opts: {
-  group: Pick<GroupRow, "id" | "title" | "description" | "contextStartedAt">;
+export async function pickPanel(opts: {
+  group: Pick<GroupRow, "id" | "title" | "description" | "contextStartedAt" | "maxTurns">;
   members: AgentRow[];
   names: Map<string, string>;
-  spoken: string[];
-}): Promise<AgentRow | null> {
-  const { members, spoken } = opts;
-  // Without a moderator, never hand the word to everyone: one reply, then the user steers (or @mentions).
-  const fallback = () => (spoken.length === 0 ? (members.find((a) => a.isOrchestrator) ?? members[0]) : null);
+}): Promise<AgentRow[]> {
+  const { members } = opts;
+  const limit = Math.max(1, Math.min(opts.group.maxTurns, MAX_PANEL));
+  const fallback = [members.find((a) => a.isOrchestrator) ?? members[0]];
+  if (members.length === 1) return fallback;
 
   const roster = members.map((a) => `- ${a.name}: ${a.role || "(no role)"}`).join("\n");
-  const turns = spoken.map((id) => opts.names.get(id) ?? "?");
   const messages: ChatMessage[] = [
     {
       role: "system",
       content: [
-        "You moderate a group chat between a user and their AI agents. Decide who should speak next, or whether the discussion is finished.",
+        "You moderate a group chat between a user and their AI agents. Choose which members should reply to the user's latest message.",
         "Rules:",
-        "- Pick the member whose area of expertise is directly needed right now. Members whose area is not relevant to the question must not speak.",
-        "- If nobody has answered the user's latest message yet, you must pick someone.",
-        "- Prefer members who haven't spoken yet this round; never pick the member who just spoke, and give a member a second turn only if someone asked them something directly.",
-        "- Answer DONE as soon as: the user's request is answered; the members agree; they start repeating each other; or they are waiting for information only the user can give (e.g. several already asked the user for the same missing details). Short rounds are better than long ones.",
-        'Reply with JSON only: {"next": "<exact member name>"} or {"next": "DONE"}.',
+        `- Pick the smallest useful panel: usually one member, at most ${limit}. Fewer is better.`,
+        "- Only include a member whose own expertise is needed to answer; leave out anyone who would just agree, repeat or comment on someone else's area.",
+        "- Order them so each one builds on the previous.",
+        "- The user decides in the end: the panel advises, it does not need to cover every angle.",
+        `Reply with JSON only: {"panel": ["Name"]} — between 1 and ${limit} exact member names.`,
       ].join("\n"),
     },
     {
@@ -76,26 +97,31 @@ export async function pickNextSpeaker(opts: {
       content: [
         `Group: ${opts.group.title ?? "(untitled)"}${opts.group.description ? ` — ${opts.group.description}` : ""}`,
         `Members:\n${roster}`,
-        `Turns so far since the user's latest message: ${turns.length ? turns.join(", ") : "none"}`,
         `Recent conversation:\n${await transcript(opts.group.id, opts.group.contextStartedAt, opts.names)}`,
       ].join("\n\n"),
     },
   ];
 
-  const result = await completeWithUtilityModel(messages, {
-    timeoutMs: 30_000,
-    accept: (text) => /"next"\s*:/.test(text),
-  });
+  // Free models first (slow and flaky); BOTLINGS_MODERATOR_MODEL is a cheap paid backup, if set.
+  let result = await completeWithUtilityModel(messages, { timeoutMs: 15_000, accept: (text) => /"panel"\s*:/.test(text) });
+  if ("error" in result && env.BOTLINGS_MODERATOR_MODEL) {
+    result = await complete(env.BOTLINGS_MODERATOR_MODEL, messages);
+  }
   if ("error" in result) {
-    console.warn(`[moderator] unavailable (${result.error}); using fallback`);
-    return fallback();
+    console.warn(`[moderator] unavailable (${result.error}); one reply only`);
+    return fallback;
   }
 
-  const raw = result.text.match(/"next"\s*:\s*"([^"]*)"/)?.[1]?.trim() ?? "";
-  console.info(`[moderator] ${result.model} → ${raw || "?"}`);
-  if (!raw || raw.toUpperCase() === "DONE") return spoken.length === 0 ? fallback() : null;
-  const wanted = raw.toLowerCase();
-  return members.find((a) => a.name.toLowerCase() === wanted) ?? members.find((a) => wanted.includes(a.name.toLowerCase())) ?? fallback();
+  const raw = result.text.match(/"panel"\s*:\s*\[([^\]]*)\]/)?.[1] ?? "";
+  const wanted = [...raw.matchAll(/"([^"]+)"/g)].map((m) => m[1].trim().toLowerCase());
+  const panel: AgentRow[] = [];
+  for (const name of wanted) {
+    const member = members.find((a) => a.name.toLowerCase() === name) ?? members.find((a) => name.includes(a.name.toLowerCase()));
+    if (member && !panel.includes(member)) panel.push(member);
+    if (panel.length >= limit) break;
+  }
+  console.info(`[moderator] ${result.model} → ${panel.map((a) => a.name).join(", ") || "(none)"}`);
+  return panel.length ? panel : fallback;
 }
 
 export async function runGroupRound(opts: {
@@ -130,7 +156,13 @@ export async function runGroupRound(opts: {
         mode: "chat",
         userText: opts.text,
         extraMessages: lastWord
-          ? [{ role: "user", content: "[Moderator] Yours is the last reply of this round: wrap up the discussion with a clear conclusion or recommendation for the user." }]
+          ? [
+              {
+                role: "user",
+                content:
+                  "[Moderator] You have the last word this round: close with a clear conclusion or recommendation for the user, without repeating the others' reasoning.",
+              },
+            ]
           : undefined,
         onDelegate: agent.isOrchestrator ? createDelegator({ orchestrator: agent, conversationId: group.id, requestId, emit }) : undefined,
       });
@@ -141,42 +173,33 @@ export async function runGroupRound(opts: {
   };
 
   const direct = mentioned(opts.text, members);
-  if (direct.length || group.discussionMode === "mentions") {
-    const speakers = direct.length ? direct : [members.find((a) => a.isOrchestrator) ?? members[0]];
-    let last: (TurnResult & { agentId: string }) | null = null;
-    for (const agent of speakers) {
-      if (signal.aborted) break;
-      last = await turn(agent);
-      if (last.error) break;
-    }
-    return last;
-  }
+  const panel =
+    direct.length || group.discussionMode === "mentions"
+      ? direct.length
+        ? direct
+        : [members.find((a) => a.isOrchestrator) ?? members[0]]
+      : (await pickPanel({ group, members, names })).slice(0, group.maxTurns);
 
-  const spoken: string[] = [];
   let spent = 0;
   let last: (TurnResult & { agentId: string }) | null = null;
-  while (!signal.aborted) {
-    if (spoken.length >= group.maxTurns || spent >= group.maxCostUsd) {
-      const reason = spoken.length >= group.maxTurns ? "turns" : "cost";
+  for (const [index, agent] of panel.entries()) {
+    if (signal.aborted) break;
+    if (spent >= group.maxCostUsd) {
       emit({
         type: "message",
         message: await saveMessage({
           conversationId: group.id,
           authorType: "agent",
           kind: "event",
-          content: reason === "turns" ? `Discussion paused after ${spoken.length} replies.` : "Discussion paused at its cost limit.",
-          metadata: { discussionStop: reason },
+          content: "Discussion paused at its cost limit.",
+          metadata: { discussionStop: "cost" },
         }),
       });
       break;
     }
-    const next = await pickNextSpeaker({ group, members, names, spoken });
-    // Nobody gets two replies in a row, whatever the moderator says.
-    if (!next || signal.aborted || next.id === spoken.at(-1)) break;
-    last = await turn(next, spoken.length === group.maxTurns - 1);
-    spoken.push(next.id);
+    last = await turn(agent, index === panel.length - 1 && panel.length > 1);
     spent += last.costUsd;
-    if (last.error || isStopped(signal)) break;
+    if (last.error) break;
   }
   return last;
 }

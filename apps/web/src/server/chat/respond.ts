@@ -28,7 +28,9 @@ export async function handleUserMessage(options: {
   const conversation = await getOwnedConversation(userId, conversationId);
   if (!conversation) throw new Error("Conversation not found");
 
-  const members = conversation.members.map((m) => m.agent);
+  const members = conversation.members
+    .sort((a, b) => a.joinedAt.getTime() - b.joinedAt.getTime())
+    .map((m) => m.agent);
   const names = new Map(members.map((a) => [a.id, a.name]));
   const command = parseCommand(text);
 
