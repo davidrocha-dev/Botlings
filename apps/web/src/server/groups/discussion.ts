@@ -63,10 +63,10 @@ export async function pickNextSpeaker(opts: {
       content: [
         "You moderate a group chat between a user and their AI agents. Decide who should speak next, or whether the discussion is finished.",
         "Rules:",
-        "- Pick the member whose expertise best moves the conversation forward right now.",
+        "- Pick the member whose area of expertise is directly needed right now. Members whose area is not relevant to the question must not speak.",
         "- If nobody has answered the user's latest message yet, you must pick someone.",
-        "- Prefer members who haven't spoken yet this round when they have something relevant to add; never pick the member who just spoke unless someone asked them a direct question.",
-        "- Answer DONE when the user's request is answered, the agents agree, they are repeating themselves, or the next step needs the user.",
+        "- Prefer members who haven't spoken yet this round; never pick the member who just spoke, and give a member a second turn only if someone asked them something directly.",
+        "- Answer DONE as soon as: the user's request is answered; the members agree; they start repeating each other; or they are waiting for information only the user can give (e.g. several already asked the user for the same missing details). Short rounds are better than long ones.",
         'Reply with JSON only: {"next": "<exact member name>"} or {"next": "DONE"}.',
       ].join("\n"),
     },
@@ -166,7 +166,8 @@ export async function runGroupRound(opts: {
       break;
     }
     const next = await pickNextSpeaker({ group, members, names, spoken });
-    if (!next || signal.aborted) break;
+    // Nobody gets two replies in a row, whatever the moderator says.
+    if (!next || signal.aborted || next.id === spoken.at(-1)) break;
     last = await turn(next, spoken.length === group.maxTurns - 1);
     spoken.push(next.id);
     spent += last.costUsd;

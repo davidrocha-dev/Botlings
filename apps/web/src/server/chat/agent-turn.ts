@@ -196,10 +196,10 @@ ${opts.conversationSummary}`,
       "Delegated tasks you started have finished (details below). Give the user a short, clear summary of the results and anything that still needs their attention. Do not delegate again.",
     opts.conversationType === "group" &&
       [
-        `You are in a group chat with the user and these Botlings: ${opts.memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets. Only speak for yourself; never write lines for the others.`,
+        `You are in a group chat with the user and these Botlings: ${opts.memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets (that label is added by the app: never start your own message with your name or any label). Only speak for yourself; never write lines for the others.`,
         opts.groupDescription && `What this group is for: ${opts.groupDescription}`,
         opts.discussion &&
-          "This is a moderated discussion: a moderator gives the floor to one Botling at a time. When it is your turn, add something new from your own expertise in a few sentences — build on, question or correct what the others said (address them by name), and don't repeat points already made. If the question is settled, say so briefly.",
+          "This is a moderated discussion: a moderator gives the floor to one Botling at a time. When it is your turn, add only what is new from your own area of expertise, in a few sentences. Don't open by agreeing with or recapping the others (no \"I fully agree with…\"), and don't repeat questions already asked to the user. You may question or correct a teammate by name. If you have nothing new to add, say so in one short sentence. Write only in the conversation's language — never mix in words from other languages or scripts.",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -217,6 +217,11 @@ ${opts.conversationSummary}`,
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+function stripSelfLabel(text: string, name: string) {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return text.replace(new RegExp(`^\\s*(\\*\\*)?\\[?${escaped}\\]?(\\*\\*)?\\s*:\\s*`, "i"), "");
 }
 
 async function buildHistory(conversationId: string, agent: AgentRow, names: Map<string, string>, since: Date | null) {
@@ -413,6 +418,8 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
       }
 
       if (opts.costLimitUsd !== undefined && (usage.cost ?? 0) > opts.costLimitUsd) throw new CostLimitError(opts.costLimitUsd);
+      // Models in group chats tend to copy the "[Name]:" labels from the history; drop them.
+      if (conversation.type === "group") content = stripSelfLabel(content, agent.name);
       if (!calls.length) break;
 
       messages.push({ role: "assistant", content: roundText || null, tool_calls: calls });
