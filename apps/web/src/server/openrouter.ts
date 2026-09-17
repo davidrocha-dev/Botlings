@@ -98,16 +98,10 @@ export type StreamEvent =
   | { type: "tool_calls"; calls: ToolCall[] }
   | { type: "usage"; usage: Usage };
 
-/** Streams a chat completion, yielding text deltas, assembled tool calls and final usage. */
-export async function* streamChat(options: {
-  model: string;
-  messages: ChatMessage[];
-  tools?: ToolDefinition[];
-  signal?: AbortSignal;
-}): AsyncGenerator<StreamEvent> {
-  if (!env.OPENROUTER_API_KEY) throw new OpenRouterError("OPENROUTER_API_KEY is not set", 401);
+const RATE_LIMIT_RETRY_MS = 4000;
 
-  const res = await fetch(`${BASE_URL}/chat/completions`, {
+function postCompletion(options: { model: string; messages: ChatMessage[]; tools?: ToolDefinition[]; signal?: AbortSignal }) {
+  return fetch(`${BASE_URL}/chat/completions`, {
     method: "POST",
     signal: options.signal,
     headers: {
@@ -123,6 +117,24 @@ export async function* streamChat(options: {
       ...(options.tools?.length ? { tools: options.tools } : {}),
     }),
   });
+}
+
+/** Streams a chat completion, yielding text deltas, assembled tool calls and final usage. */
+
+export async function* streamChat(options: {
+  model: string;
+  messages: ChatMessage[];
+  tools?: ToolDefinition[];
+  signal?: AbortSignal;
+}): AsyncGenerator<StreamEvent> {
+  if (!env.OPENROUTER_API_KEY) throw new OpenRouterError("OPENROUTER_API_KEY is not set", 401);
+
+  let res = await postCompletion(options);
+  // Providers rate-limit in bursts: wait once and retry the SAME model (never switch).
+  if (res.status === 429 && !options.signal?.aborted) {
+    await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_RETRY_MS));
+    if (!options.signal?.aborted) res = await postCompletion(options);
+  }
 
   if (!res.ok || !res.body) {
     let message = `OpenRouter error ${res.status}`;

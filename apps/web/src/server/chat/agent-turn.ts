@@ -22,6 +22,7 @@ import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./pro
 import { isStopped } from "./generations";
 import { saveMessage } from "./save-message";
 import { SUGGEST_ROUTINE_TOOL, suggestRoutine } from "@/server/routines/suggest";
+import { SERVER_TIME_ZONE } from "@/server/routines/schedule";
 import type { ChatStreamEvent } from "@/lib/types";
 
 export { saveMessage };
@@ -148,13 +149,24 @@ const DELEGATION_GUIDE =
   "Delegation: handle simple things yourself (questions, quick answers, small tasks you can do well). Use delegate_task only when a crew member is clearly better suited for the work, e.g. it matches their role or needs their computer. When you delegate, tell the user briefly who is working on it; the result will come back to you and you will then summarise it.";
 
 const RESEARCH_GUIDE =
-  "Research: never invent facts that can be checked and change over time — prices (flights, hotels, fees, ad costs), dates and deadlines, venues, contacts, rules, statistics. Look them up with your browser first (a search engine, then the most reliable pages), give the key numbers with where they came from, and say when you could only estimate. Don't research what the user already told you or what is general knowledge. In group discussions you may research before your turn; keep the reply itself short.";
+  "Research: always search with the full date including the year (models get the current year wrong). Never invent facts that can be checked and change over time — prices (flights, hotels, fees, ad costs), dates and deadlines, venues, contacts, rules, statistics. Look them up with your browser first (a search engine, then the most reliable pages), give the key numbers with where they came from, and say when you could only estimate. Don't research what the user already told you or what is general knowledge. In group discussions you may research before your turn; keep the reply itself short.";
 
 const NO_RESEARCH_GUIDE =
   "You don't browse the internet. When something depends on current facts (prices, dates, contacts…), give a clearly labelled estimate and say the user can check it.";
 
 const SAFETY_GUIDE =
   "Risky actions on your computer (purchases, sending or publishing, deleting, pushing code, accepting terms…) automatically pause for the user's approval; just attempt them normally when the task requires it. If an action is denied, do not retry it or find a workaround — tell the user. You can never type passwords, codes or card details: ask the user to take control of the screen for those steps.";
+
+/** Long date in the server's timezone, so agents never assume the year from their training data. */
+function today() {
+  return new Date().toLocaleDateString("en-GB", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: SERVER_TIME_ZONE,
+  });
+}
 
 function systemPrompt(opts: {
   agent: AgentRow;
@@ -178,6 +190,7 @@ function systemPrompt(opts: {
   const { agent, mode } = opts;
   return [
     `You are ${agent.name}, a Botling — an AI agent in the user's personal crew.`,
+    `Today is ${today()}. Dates the user gives without a year mean the next time that date happens from today.`,
     agent.role && `Your role: ${agent.role}`,
     agent.prompt &&
       (opts.canPropose
