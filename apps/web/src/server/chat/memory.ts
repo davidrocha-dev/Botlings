@@ -53,8 +53,8 @@ export async function listMemories(agentId: string) {
 
 export function memorySection(memories: MemoryRow[]) {
   const guide =
-    "Memory: use remember for durable facts you learn (not for one-off details of the current task, and never for secrets or passwords). Use forget when a saved fact becomes wrong. Don't announce every save — a short mention is enough.";
-  if (!memories.length) return `${guide}\nYou have no saved facts yet.`;
+    "Memory: what you remember is listed below — it is the only thing you carry between conversations, so never go looking for it in files on your computer. Use remember for durable facts you learn (not for one-off details of the current task, and never for secrets or passwords). Use forget when a saved fact becomes wrong. Don't announce every save — a short mention is enough.";
+  if (!memories.length) return `${guide}\nYou have no saved facts yet: when you need something you were never told, ask the user for it.`;
   return [
     guide,
     `What you remember (${memories.length}/${MEMORY_LIMIT}):`,
