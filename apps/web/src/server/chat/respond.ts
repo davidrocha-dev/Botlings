@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, ne } from "drizzle-orm";
 import { db, schema } from "@/server/db";
 import { getAgentDto, getOwnedConversation, toMessageDto } from "@/server/data";
 import {
@@ -15,6 +15,7 @@ import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerT
 import type { ChatStreamEvent } from "@/lib/types";
 
 type AgentRow = typeof schema.agents.$inferSelect;
+type TeamMember = { name: string; role: string };
 type Emit = (event: ChatStreamEvent) => void;
 
 const HISTORY_LIMIT = 40;
@@ -43,16 +44,36 @@ function userAskedForModelChange(text: string, modelId: string) {
   return /\bmodel|\bmodelo/.test(lower) || (slug.length > 3 && lower.includes(slug));
 }
 
+/** The orchestrator's current crew: every other agent of the same owner, fetched fresh per message. */
+async function loadTeam(agent: AgentRow): Promise<TeamMember[]> {
+  if (!agent.isOrchestrator) return [];
+  return db
+    .select({ name: schema.agents.name, role: schema.agents.role })
+    .from(schema.agents)
+    .where(and(eq(schema.agents.ownerId, agent.ownerId), ne(schema.agents.id, agent.id)))
+    .orderBy(asc(schema.agents.createdAt));
+}
+
+function teamSection(team: TeamMember[]) {
+  if (!team.length) return "Your crew: you are currently the only Botling. The user can create more.";
+  return [
+    "Your crew (the other Botlings you coordinate, as of this message):",
+    ...team.map((m) => `- ${m.name}: ${m.role.trim() || "(no role description)"}`),
+  ].join("\n");
+}
+
 function systemPrompt(
   agent: AgentRow,
   conversationType: "direct" | "group",
   memberNames: string[],
   hasComputer: boolean,
+  team: TeamMember[],
 ) {
   return [
     `You are ${agent.name}, a Botling — an AI agent in the user's personal crew.`,
     agent.role && `Your role: ${agent.role}`,
     agent.prompt && `Instructions from the user:\n${agent.prompt}`,
+    agent.isOrchestrator && teamSection(team),
     conversationType === "group" &&
       `You are in a group chat with the user and these Botlings: ${memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets. Only speak for yourself.`,
     hasComputer &&
@@ -163,7 +184,10 @@ export async function handleUserMessage(options: {
   const tools = supportsTools ? [SET_MODEL_TOOL, ...(computerReady ? COMPUTER_TOOLS : [])] : undefined;
 
   const messages: ChatMessage[] = [
-    { role: "system", content: systemPrompt(agent, conversation.type, members.map((m) => m.name), computerReady) },
+    {
+      role: "system",
+      content: systemPrompt(agent, conversation.type, members.map((m) => m.name), computerReady, await loadTeam(agent)),
+    },
     ...(await buildHistory(conversationId, agent, names)),
   ];
 
