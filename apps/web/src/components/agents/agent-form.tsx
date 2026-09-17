@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { ChevronLeft, Loader2, Shuffle } from "lucide-react";
+import { AgentGenerator } from "./agent-generator";
 import { ModelPicker } from "./model-picker";
 import { BotlingAvatar } from "@/components/avatar/botling-avatar";
 import {
@@ -140,6 +141,15 @@ export function AgentForm({ agent }: { agent?: Agent }) {
           </div>
 
           <div className="space-y-8">
+            {!editing && (
+              <AgentGenerator
+                onDraft={(draft) => {
+                  setName(draft.name);
+                  setRole(draft.role);
+                  setPrompt(draft.prompt);
+                }}
+              />
+            )}
             <Section
               title={t.agent.appearance}
               action={

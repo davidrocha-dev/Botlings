@@ -33,6 +33,8 @@ const schema = z.object({
   OPENROUTER_API_KEY: z.string().optional(),
   BOTLINGS_MODE: z.enum(["personal", "commercial"]).default("personal"),
   BOTLINGS_DEFAULT_MODEL: z.string().default("google/gemma-4-31b-it:free"),
+  /** Cheap model for small helper jobs (e.g. "Generate with AI" in the agent form). */
+  BOTLINGS_UTILITY_MODEL: z.string().default("google/gemma-4-26b-a4b-it"),
   BOTLINGS_LICENSE_PUBLIC_KEY: z.string().optional(),
   BOTLINGS_AGENT_IMAGE: z.string().default("botlings-agent:latest"),
   BOTLINGS_MAX_ACTIVE_COMPUTERS: z.coerce.number().int().min(1).default(4),

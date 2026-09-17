@@ -149,6 +149,16 @@ const en = {
     commandPlaceholder: "Type a command…",
     run: "Run",
   },
+  generator: {
+    title: "Generate with AI",
+    hint: "Describe the agent in one sentence and get a suggested name, role and instructions. You can edit everything before creating.",
+    placeholder: "e.g. Someone who helps me plan gigs and reply to promoters",
+    generate: "Generate",
+    generating: "Generating…",
+    review: "Suggestion filled in below — review it before creating.",
+    failed: "Couldn't generate a suggestion. Try again or fill it in yourself.",
+    rateLimited: "Too many attempts. Wait a minute and try again.",
+  },
   proposals: {
     title: "Wants to update its instructions",
     reason: "Why",
@@ -351,6 +361,16 @@ const pt: Dictionary = {
     terminalHint: "Corre comandos no computador do agente (em ~/workspace). Para programas interativos, usa o Terminal no ecrã dele.",
     commandPlaceholder: "Escreve um comando…",
     run: "Correr",
+  },
+  generator: {
+    title: "Gerar com IA",
+    hint: "Descreve o agente numa frase e recebe uma sugestão de nome, função e instruções. Podes editar tudo antes de criar.",
+    placeholder: "ex.: Alguém que me ajuda a marcar concertos e responder a promotores",
+    generate: "Gerar",
+    generating: "A gerar…",
+    review: "Sugestão preenchida abaixo — revê-a antes de criar.",
+    failed: "Não foi possível gerar uma sugestão. Tenta de novo ou preenche tu.",
+    rateLimited: "Demasiadas tentativas. Espera um minuto e tenta de novo.",
   },
   proposals: {
     title: "Quer atualizar as instruções",
