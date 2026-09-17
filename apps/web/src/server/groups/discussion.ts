@@ -20,6 +20,10 @@ type GroupRow = typeof schema.conversations.$inferSelect;
  */
 
 const TRANSCRIPT_MESSAGES = 16;
+
+/** What the chair does after the panel has spoken. */
+const CLOSING_INSTRUCTION =
+  "[Chair] You ran this round. Close it for the user, short and concrete: 1) tally the votes each member ended with (e.g. \"2 negotiate, 1 decline\"); 2) your recommendation in one or two sentences; 3) where they disagreed and why, if they did; 4) what is still missing for the user to decide, or the single next step. Don't repeat their reasoning, don't add new analysis, and don't decide for the user.";
 /** Even when the group allows more, a moderator-picked panel stays this small. */
 const MAX_PANEL = 3;
 
@@ -72,10 +76,12 @@ export async function pickPanel(opts: {
   group: Pick<GroupRow, "id" | "title" | "description" | "contextStartedAt" | "maxTurns">;
   members: AgentRow[];
   names: Map<string, string>;
+  /** The chair's model (the orchestrator's), used before the free models. */
+  chairModel?: string;
 }): Promise<AgentRow[]> {
   const { members } = opts;
   const limit = Math.max(1, Math.min(opts.group.maxTurns, MAX_PANEL));
-  const fallback = [members.find((a) => a.isOrchestrator) ?? members[0]];
+  const fallback = [members[0]];
   if (members.length === 1) return fallback;
 
   const roster = members.map((a) => `- ${a.name}: ${a.role || "(no role)"}`).join("\n");
@@ -102,8 +108,9 @@ export async function pickPanel(opts: {
     },
   ];
 
-  // Free models first (slow and flaky); BOTLINGS_MODERATOR_MODEL is a cheap paid backup, if set.
-  let result = await completeWithUtilityModel(messages, { timeoutMs: 15_000, accept: (text) => /"panel"\s*:/.test(text) });
+  // The chair's own model decides (fast, a fraction of a cent); free models are the fallback.
+  let result = opts.chairModel ? await complete(opts.chairModel, messages) : { error: "no_chair" as const };
+  if ("error" in result) result = await completeWithUtilityModel(messages, { timeoutMs: 15_000, accept: (text) => /"panel"\s*:/.test(text) });
   if ("error" in result && env.BOTLINGS_MODERATOR_MODEL) {
     result = await complete(env.BOTLINGS_MODERATOR_MODEL, messages);
   }
@@ -144,7 +151,7 @@ export async function runGroupRound(opts: {
     discussion: group.discussionMode === "discussion",
   };
 
-  const turn = async (agent: AgentRow, lastWord = false) => {
+  const turn = async (agent: AgentRow, lastWord = false, instruction?: string) => {
     const requestId = crypto.randomUUID();
     const endRequest = agent.isOrchestrator ? beginRequest(requestId) : null;
     try {
@@ -155,15 +162,17 @@ export async function runGroupRound(opts: {
         signal,
         mode: "chat",
         userText: opts.text,
-        extraMessages: lastWord
-          ? [
-              {
-                role: "user",
-                content:
-                  "[Moderator] You have the last word this round: close with a clear conclusion or recommendation for the user, without repeating the others' reasoning.",
-              },
-            ]
-          : undefined,
+        extraMessages: instruction
+          ? [{ role: "user", content: instruction }]
+          : lastWord
+            ? [
+                {
+                  role: "user",
+                  content:
+                    "[Moderator] You have the last word this round: close with a clear conclusion or recommendation for the user, without repeating the others' reasoning.",
+                },
+              ]
+            : undefined,
         onDelegate: agent.isOrchestrator ? createDelegator({ orchestrator: agent, conversationId: group.id, requestId, emit }) : undefined,
       });
       return { ...result, agentId: agent.id };
@@ -172,34 +181,54 @@ export async function runGroupRound(opts: {
     }
   };
 
+  // The orchestrator chairs: it picks the panel and closes the round instead of taking a seat in it.
+  const chair = members.find((a) => a.isOrchestrator) ?? null;
+  const speakers = members.filter((a) => a !== chair);
   const direct = mentioned(opts.text, members);
-  const panel =
-    direct.length || group.discussionMode === "mentions"
-      ? direct.length
-        ? direct
-        : [members.find((a) => a.isOrchestrator) ?? members[0]]
-      : (await pickPanel({ group, members, names })).slice(0, group.maxTurns);
+
+  const panel = direct.length
+    ? direct
+    : group.discussionMode === "mentions"
+      ? [chair ?? speakers[0]]
+      : speakers.length
+        ? (await pickPanel({ group, members: speakers, names, chairModel: chair?.model })).slice(0, group.maxTurns)
+        : chair
+          ? [chair]
+          : [];
+
+  const overBudget = async () => {
+    emit({
+      type: "message",
+      message: await saveMessage({
+        conversationId: group.id,
+        authorType: "agent",
+        kind: "event",
+        content: "Discussion paused at its cost limit.",
+        metadata: { discussionStop: "cost" },
+      }),
+    });
+  };
 
   let spent = 0;
   let last: (TurnResult & { agentId: string }) | null = null;
+  let stopped = false;
   for (const [index, agent] of panel.entries()) {
     if (signal.aborted) break;
     if (spent >= group.maxCostUsd) {
-      emit({
-        type: "message",
-        message: await saveMessage({
-          conversationId: group.id,
-          authorType: "agent",
-          kind: "event",
-          content: "Discussion paused at its cost limit.",
-          metadata: { discussionStop: "cost" },
-        }),
-      });
+      stopped = true;
+      await overBudget();
       break;
     }
-    last = await turn(agent, index === panel.length - 1 && panel.length > 1);
+    // Without a chair to close the round, the last panellist wraps up.
+    last = await turn(agent, !chair && index === panel.length - 1 && panel.length > 1);
     spent += last.costUsd;
     if (last.error) break;
+  }
+
+  // The chair's closing message: tally of the votes, recommendation and what's still missing.
+  const chairSpeaks = chair && !stopped && !signal.aborted && !last?.error && panel.length > 0 && !panel.includes(chair);
+  if (chairSpeaks) {
+    last = await turn(chair, false, CLOSING_INSTRUCTION);
   }
   return last;
 }

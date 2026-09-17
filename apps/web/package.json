@@ -11,7 +11,8 @@
     "start:next": "next start",
     "start:gateway": "tsx --tsconfig tsconfig.json src/gateway/server.ts",
     "lint": "eslint",
-    "typecheck": "next typegen && tsc --noEmit"
+    "typecheck": "next typegen && tsc --noEmit",
+    "smoke": "tsx --tsconfig tsconfig.json scripts/smoke.ts"
   },
   "dependencies": {
     "@electric-sql/pglite": "^0.5.8",

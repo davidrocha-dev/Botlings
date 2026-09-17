@@ -27,7 +27,7 @@ export const groupPatchSchema = z.object({
 });
 
 export class GroupError extends Error {
-  constructor(readonly code: "not_found" | "invalid_members" | "too_many_members" | "last_member") {
+  constructor(readonly code: "not_found" | "invalid_members" | "too_many_members" | "last_member" | "orchestrator") {
     super(code);
   }
 }
@@ -92,8 +92,19 @@ async function memberEvent(ownerId: string, groupId: string, agentId: string, ev
   publish(ownerId, groupId, { type: "message", message });
 }
 
+/** The orchestrator chairs every group: it picks who speaks and closes each round. */
+async function orchestratorId(ownerId: string) {
+  const [row] = await db
+    .select({ id: schema.agents.id })
+    .from(schema.agents)
+    .where(and(eq(schema.agents.ownerId, ownerId), eq(schema.agents.isOrchestrator, true)));
+  return row?.id ?? null;
+}
+
 export async function createGroup(ownerId: string, input: z.infer<typeof groupInputSchema>) {
-  const memberIds = await assertOwnAgents(ownerId, input.memberIds);
+  const chosen = await assertOwnAgents(ownerId, input.memberIds);
+  const chair = await orchestratorId(ownerId);
+  const memberIds = chair && !chosen.includes(chair) ? [chair, ...chosen] : chosen;
   const [group] = await db
     .insert(schema.conversations)
     .values({
@@ -138,6 +149,7 @@ export async function addGroupMembers(ownerId: string, groupId: string, agentIds
 
 export async function removeGroupMember(ownerId: string, groupId: string, agentId: string) {
   await ownedGroup(ownerId, groupId);
+  if (agentId === (await orchestratorId(ownerId))) throw new GroupError("orchestrator");
   const members = await db
     .select({ agentId: schema.conversationMembers.agentId })
     .from(schema.conversationMembers)

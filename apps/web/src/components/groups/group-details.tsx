@@ -187,7 +187,7 @@ export function GroupDetails({ conversation }: { conversation: Conversation }) {
                     {t.status[agent.status]}
                   </p>
                 </div>
-                {members.length > 1 && (
+                {members.length > 1 && !agent.isOrchestrator && (
                   <IconButton
                     aria-label={`${t.groups.remove}: ${agent.name}`}
                     onClick={() => {
