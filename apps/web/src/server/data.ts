@@ -48,13 +48,13 @@ export async function getAgentUsageToday(agentIds: string[]) {
   if (!agentIds.length) return new Map<string, { cost: number; tokens: number }>();
   const rows = await db
     .select({
-      agentId: schema.messages.agentId,
-      cost: sql<number>`coalesce(sum(${schema.messages.costUsd}), 0)::float`,
-      tokens: sql<number>`coalesce(sum(coalesce(${schema.messages.promptTokens}, 0) + coalesce(${schema.messages.completionTokens}, 0)), 0)::int`,
+      agentId: schema.usageLedger.agentId,
+      cost: sql<number>`coalesce(sum(${schema.usageLedger.costUsd}), 0)::float`,
+      tokens: sql<number>`coalesce(sum(${schema.usageLedger.promptTokens} + ${schema.usageLedger.completionTokens}), 0)::int`,
     })
-    .from(schema.messages)
-    .where(and(inArray(schema.messages.agentId, agentIds), gte(schema.messages.createdAt, startOfToday())))
-    .groupBy(schema.messages.agentId);
+    .from(schema.usageLedger)
+    .where(and(inArray(schema.usageLedger.agentId, agentIds), gte(schema.usageLedger.createdAt, startOfToday())))
+    .groupBy(schema.usageLedger.agentId);
   return new Map(rows.map((r) => [r.agentId!, { cost: r.cost, tokens: r.tokens }]));
 }
 

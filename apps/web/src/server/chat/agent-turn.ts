@@ -15,6 +15,7 @@ import { callRunner, dockerAvailable, getComputer } from "@/server/computers/man
 import { isAlwaysAllowed, requestApproval } from "@/server/approvals/approvals";
 import { classifyAction, type ElementInfo } from "@/server/approvals/classify";
 import { secretNamesForAgent } from "@/server/secrets/secrets";
+import { BudgetExceededError, assertWithinBudget } from "@/server/usage/usage";
 import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
 import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
 import type { ChatStreamEvent } from "@/lib/types";
@@ -273,6 +274,21 @@ async function gateComputerAction(opts: {
   };
 }
 
+/** Appends the turn's spend to the usage ledger (survives agent and chat deletion). */
+async function recordUsage(agent: AgentRow, model: string, usage: Usage) {
+  const cost = usage.cost ?? 0;
+  if (!cost && !usage.prompt_tokens && !usage.completion_tokens) return;
+  await db.insert(schema.usageLedger).values({
+    ownerId: agent.ownerId,
+    agentId: agent.id,
+    agentName: agent.name,
+    model,
+    promptTokens: usage.prompt_tokens,
+    completionTokens: usage.completion_tokens,
+    costUsd: cost,
+  });
+}
+
 /** Runs one agent turn: prompt + tools + streaming, persisting the resulting messages. */
 export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
   const { agent, conversation, emit, signal, mode } = opts;
@@ -325,6 +341,9 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
 
   try {
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      // Budgets are checked before every model call, including the spend of this turn so far.
+      await assertWithinBudget(agent.ownerId, agent.id, usage.cost ?? 0);
+
       let calls: ToolCall[] = [];
       let roundText = "";
 
@@ -440,6 +459,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         ...usageFields,
       });
     }
+    await recordUsage(agent, modelUsed, usage);
     const [fresh] = await db.select().from(schema.agents).where(eq(schema.agents.id, agent.id));
     if (fresh) emit({ type: "agent", agent: await getAgentDto(fresh) });
     return { content: fullContent.trim(), costUsd: usage.cost ?? 0 };
@@ -449,7 +469,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
       : error instanceof Error
         ? error.message
         : "Unknown error";
-    const status = error instanceof OpenRouterError ? error.status : 500;
+    const status = error instanceof OpenRouterError ? error.status : error instanceof BudgetExceededError ? 402 : 500;
     // Keep whatever was streamed before the failure, and record the usage so far.
     if (content.trim()) {
       fullContent += content.trim();
@@ -473,6 +493,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         metadata: { errorCode: status },
       }),
     });
+    await recordUsage(agent, modelUsed, usage);
     return { content: fullContent.trim(), costUsd: usage.cost ?? 0, error: reason };
   }
 }

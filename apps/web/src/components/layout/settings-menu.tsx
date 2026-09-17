@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
-import { KeyRound, Languages, LogOut, Monitor, Moon, Settings, Sun } from "lucide-react";
+import { KeyRound, Languages, LogOut, Monitor, Moon, Settings, Sun, Wallet } from "lucide-react";
 import { logout } from "@/app/(auth)/login/actions";
 import { useStore } from "@/lib/store";
 import { IconButton } from "@/components/ui/icon-button";
@@ -109,6 +109,14 @@ export function SettingsMenu() {
               >
                 <KeyRound className="size-4 text-muted" />
                 {t.nav.secrets}
+              </Link>
+              <Link
+                href="/usage"
+                onClick={() => setOpen(false)}
+                className="flex items-center gap-2 rounded-xl px-2 py-2 text-sm hover:bg-surface"
+              >
+                <Wallet className="size-4 text-muted" />
+                {t.nav.usage}
               </Link>
             </nav>
             <form action={logout} className="flex items-center justify-between gap-2 border-t border-border pt-3">

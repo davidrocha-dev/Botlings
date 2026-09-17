@@ -43,6 +43,13 @@
       "when": 1789657583557,
       "tag": "0005_secrets",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1789658095933,
+      "tag": "0006_budgets_usage_ledger",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { AlertTriangle, Cpu, FileText, Globe, Loader2, MousePointerClick, SquareTerminal } from "lucide-react";
 import { BotlingAvatar } from "@/components/avatar/botling-avatar";
@@ -110,7 +111,13 @@ function ErrorRow({ message }: { message: Message }) {
       <div className="min-w-0">
         <p className="font-medium text-danger">{t.chat.errorTitle}</p>
         <p className="mt-0.5 break-words text-muted">{message.text}</p>
-        <p className="mt-1 text-xs text-subtle">{t.chat.errorHint}</p>
+        {message.metadata?.errorCode === 402 ? (
+          <Link href="/usage" className="mt-1 inline-block text-xs font-medium text-accent">
+            {t.chat.budgetHint}
+          </Link>
+        ) : (
+          <p className="mt-1 text-xs text-subtle">{t.chat.errorHint}</p>
+        )}
       </div>
     </motion.div>
   );

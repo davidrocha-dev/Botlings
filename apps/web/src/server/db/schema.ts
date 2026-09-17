@@ -1,4 +1,4 @@
-import { relations } from "drizzle-orm";
+import { relations, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -262,6 +262,52 @@ export const approvalRules = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => [primaryKey({ columns: [t.agentId, t.category] })],
+);
+
+/**
+ * Append-only record of model spend per agent turn. Kept separately from messages so deleting an
+ * agent (and its chat) never erases cost history or resets budgets.
+ */
+export const usageLedger = pgTable(
+  "usage_ledger",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
+    /** Snapshot, so reports can still name deleted agents. */
+    agentName: text("agent_name").notNull().default(""),
+    model: text("model"),
+    promptTokens: integer("prompt_tokens").notNull().default(0),
+    completionTokens: integer("completion_tokens").notNull().default(0),
+    costUsd: numeric("cost_usd", { precision: 14, scale: 8, mode: "number" }).notNull().default(0),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("usage_ledger_owner_created_idx").on(t.ownerId, t.createdAt)],
+);
+
+/**
+ * Spending limits in USD. `agentId` null = limit for all of the owner's agents together.
+ * When a limit is reached, agents stop calling models until the next day/month or a higher limit.
+ */
+export const budgets = pgTable(
+  "budgets",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    ownerId: uuid("owner_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    agentId: uuid("agent_id").references(() => agents.id, { onDelete: "cascade" }),
+    period: text("period", { enum: ["day", "month"] }).notNull(),
+    limitUsd: numeric("limit_usd", { precision: 12, scale: 4, mode: "number" }).notNull(),
+    ...timestamps,
+  },
+  (t) => [
+    uniqueIndex("budgets_scope_idx").on(t.ownerId, t.agentId, t.period),
+    // agent_id is NULL for global budgets, which a plain unique index treats as distinct.
+    uniqueIndex("budgets_global_idx").on(t.ownerId, t.period).where(sql`${t.agentId} is null`),
+  ],
 );
 
 /** Encrypted values agents can use (as environment variables) without ever seeing them. */
