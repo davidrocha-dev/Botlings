@@ -133,6 +133,12 @@ export const messages = pgTable(
   ],
 );
 
+/** Agent computers whose deletion must still happen (the agent row is already gone). */
+export const pendingComputerDeletions = pgTable("pending_computer_deletions", {
+  agentId: uuid("agent_id").primaryKey(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const conversationsRelations = relations(conversations, ({ many }) => ({
   members: many(conversationMembers),
 }));

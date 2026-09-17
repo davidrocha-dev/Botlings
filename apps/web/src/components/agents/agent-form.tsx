@@ -17,6 +17,7 @@ import {
 } from "@/components/avatar/botling-options";
 import { useI18n } from "@/lib/i18n/client";
 import { useStore } from "@/lib/store";
+import type { Agent } from "@/lib/types";
 import { cn } from "@/lib/cn";
 
 function Section({ title, action, children }: { title: string; action?: React.ReactNode; children: React.ReactNode }) {
@@ -34,16 +35,24 @@ function Section({ title, action, children }: { title: string; action?: React.Re
 const fieldClass =
   "w-full rounded-xl border border-border-strong bg-bg px-3.5 py-2.5 text-[15px] outline-none transition-shadow placeholder:text-subtle focus:border-accent/50 focus:ring-4 focus:ring-accent-soft";
 
-export function CreateAgent() {
+/** Create a new agent, or edit an existing one when `agent` is given. */
+export function AgentForm({ agent }: { agent?: Agent }) {
   const { t } = useI18n();
-  const { addAgent, defaultModel } = useStore();
+  const { addAgent, upsertAgent, defaultModel, conversations } = useStore();
   const router = useRouter();
+  const editing = !!agent;
+  const directConversationId = agent
+    ? conversations.find((c) => c.type === "direct" && c.memberIds[0] === agent.id)?.id
+    : undefined;
+  const backHref = directConversationId ? `/c/${directConversationId}` : "/";
 
-  const [appearance, setAppearance] = useState<BotlingAppearance>({ shape: "blob", color: "violet", mood: "happy" });
-  const [name, setName] = useState("");
-  const [role, setRole] = useState("");
-  const [prompt, setPrompt] = useState("");
-  const [model, setModel] = useState(defaultModel);
+  const [appearance, setAppearance] = useState<BotlingAppearance>(
+    agent?.appearance ?? { shape: "blob", color: "violet", mood: "happy" },
+  );
+  const [name, setName] = useState(agent?.name ?? "");
+  const [role, setRole] = useState(agent?.role ?? "");
+  const [prompt, setPrompt] = useState(agent?.prompt ?? "");
+  const [model, setModel] = useState(agent?.model ?? defaultModel);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<keyof typeof t.agent.errors | null>(null);
 
@@ -56,14 +65,19 @@ export function CreateAgent() {
     setSubmitting(true);
     setError(null);
     try {
-      const res = await fetch("/api/agents", {
-        method: "POST",
+      const res = await fetch(editing ? `/api/agents/${agent.id}` : "/api/agents", {
+        method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name, role, prompt, model, appearance }),
       });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error in t.agent.errors ? data.error : "generic");
+        return;
+      }
+      if (editing) {
+        upsertAgent({ ...data.agent, status: agent.status });
+        router.push(backHref);
         return;
       }
       addAgent(data.agent, {
@@ -87,12 +101,16 @@ export function CreateAgent() {
     <div className="flex h-full min-w-0 flex-1 flex-col">
       <header className="glass pt-safe sticky top-0 z-10 border-b border-border">
         <div className="flex h-14 items-center gap-2 px-2 md:px-6">
-          <Link href="/" aria-label={t.nav.back} className="inline-flex h-9 items-center text-accent md:hidden">
+          <Link
+            href={backHref}
+            aria-label={t.nav.back}
+            className={cn("inline-flex h-9 items-center text-accent", !editing && "md:hidden")}
+          >
             <ChevronLeft className="size-7" />
           </Link>
           <div>
-            <h1 className="leading-tight font-semibold">{t.agent.createTitle}</h1>
-            <p className="text-xs text-muted">{t.agent.createSubtitle}</p>
+            <h1 className="leading-tight font-semibold">{editing ? t.agent.editTitle : t.agent.createTitle}</h1>
+            <p className="text-xs text-muted">{editing ? t.agent.editSubtitle : t.agent.createSubtitle}</p>
           </div>
         </div>
       </header>
@@ -256,8 +274,10 @@ export function CreateAgent() {
                 {submitting ? (
                   <span className="inline-flex items-center gap-2">
                     <Loader2 className="size-4 animate-spin" />
-                    {t.agent.creating}
+                    {editing ? t.agent.saving : t.agent.creating}
                   </span>
+                ) : editing ? (
+                  t.agent.save
                 ) : (
                   t.agent.create
                 )}

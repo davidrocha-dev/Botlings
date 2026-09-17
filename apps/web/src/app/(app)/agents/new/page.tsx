@@ -1,5 +1,5 @@
-import { CreateAgent } from "@/components/agents/create-agent";
+import { AgentForm } from "@/components/agents/agent-form";
 
 export default function NewAgentPage() {
-  return <CreateAgent />;
+  return <AgentForm />;
 }

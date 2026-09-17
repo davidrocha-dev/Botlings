@@ -11,6 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       xvfb fluxbox x11vnc x11-xserver-utils novnc websockify \
       chromium fonts-noto fonts-noto-color-emoji \
       ca-certificates curl git jq less nano procps python3 python3-pip python-is-python3 unzip wget xterm \
+      iptables \
     && rm -rf /var/lib/apt/lists/* \
     # Black letterboxing around the scaled screen instead of noVNC's grey.
     && echo 'body, #noVNC_container { background: #000 !important; border-radius: 0 !important; }' >> /usr/share/novnc/app/styles/base.css \
@@ -27,10 +28,10 @@ COPY runner/package.json ./
 RUN npm install --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY runner/ ./
 RUN chmod +x /opt/runner/desktop/open-browser.sh
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+COPY entrypoint.sh firewall.sh start-desktop.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/entrypoint.sh /usr/local/bin/firewall.sh /usr/local/bin/start-desktop.sh
 
-USER botling
+# The entrypoint starts as root to install the firewall, then drops to "botling" (see entrypoint.sh).
 WORKDIR /home/botling
 EXPOSE 8080 6080
 

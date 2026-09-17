@@ -39,6 +39,13 @@ const schema = z.object({
   BOTLINGS_COMPUTER_MEMORY_MB: z.coerce.number().int().min(512).default(1536),
   BOTLINGS_COMPUTER_CPUS: z.coerce.number().min(0.5).default(1.5),
   BOTLINGS_COMPUTER_IDLE_MINUTES: z.coerce.number().min(1).default(15),
+  /** Agents can't reach private networks (your LAN, the host) unless this is "true". */
+  BOTLINGS_COMPUTER_ALLOW_LAN: z
+    .enum(["true", "false"])
+    .default("false")
+    .transform((v) => v === "true"),
+  /** Port of the authenticated screen gateway (src/gateway/server.ts). */
+  BOTLINGS_GATEWAY_PORT: z.coerce.number().int().min(1).max(65535).default(3001),
   NODE_ENV: z.string().default("development"),
 });
 

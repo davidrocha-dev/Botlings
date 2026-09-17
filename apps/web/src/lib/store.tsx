@@ -25,6 +25,8 @@ type StoreValue = {
   markRead: (conversationId: string) => void;
   addAgent: (agent: Agent, conversation: Conversation) => void;
   upsertAgent: (agent: Agent) => void;
+  /** Drops a deleted agent, its removed conversations, and its group memberships. */
+  removeAgent: (agentId: string, removedConversationIds: string[]) => void;
 };
 
 const StoreContext = createContext<StoreValue | null>(null);
@@ -166,6 +168,21 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
     [conversations, handleEvent],
   );
 
+  const removeAgent = useCallback((agentId: string, removedConversationIds: string[]) => {
+    const removed = new Set(removedConversationIds);
+    setAgents((list) => list.filter((a) => a.id !== agentId));
+    setConversations((list) =>
+      list
+        .filter((c) => !removed.has(c.id))
+        .map((c) => (c.memberIds.includes(agentId) ? { ...c, memberIds: c.memberIds.filter((id) => id !== agentId) } : c)),
+    );
+    setMessages((map) => {
+      const next = { ...map };
+      for (const id of removed) delete next[id];
+      return next;
+    });
+  }, []);
+
   const addAgent = useCallback(
     (agent: Agent, conversation: Conversation) => {
       upsertAgent(agent);
@@ -192,6 +209,7 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       markRead,
       addAgent,
       upsertAgent,
+      removeAgent,
     }),
     [
       initial.user,
@@ -209,6 +227,7 @@ export function StoreProvider({ initial, children }: { initial: Bootstrap; child
       markRead,
       addAgent,
       upsertAgent,
+      removeAgent,
     ],
   );
 

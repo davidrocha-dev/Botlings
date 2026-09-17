@@ -26,6 +26,12 @@
   --shadow-sm: 0 1px 2px rgb(15 15 30 / 0.06);
   --shadow-md: 0 8px 24px -8px rgb(15 15 30 / 0.16), 0 2px 6px rgb(15 15 30 / 0.05);
   --shadow-lg: 0 24px 64px -16px rgb(15 15 30 / 0.28);
+  /* The terminal stays dark in both themes. */
+  --terminal-bg: #0b0b10;
+  --terminal-text: #e6e6ee;
+  --terminal-muted: #8b8b99;
+  --terminal-prompt: #9083ff;
+  --terminal-error: #ff8a8a;
   color-scheme: light;
 }
 
@@ -72,6 +78,11 @@
   --color-warning: var(--warning);
   --color-danger: var(--danger);
   --color-glass: var(--glass);
+  --color-terminal-bg: var(--terminal-bg);
+  --color-terminal-text: var(--terminal-text);
+  --color-terminal-muted: var(--terminal-muted);
+  --color-terminal-prompt: var(--terminal-prompt);
+  --color-terminal-error: var(--terminal-error);
   --shadow-soft: var(--shadow-sm);
   --shadow-float: var(--shadow-md);
   --shadow-modal: var(--shadow-lg);

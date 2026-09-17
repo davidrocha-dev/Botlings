@@ -78,10 +78,12 @@ function Screen({
 }) {
   const { t } = useI18n();
 
-  if (state?.status === "running" && state.vncUrl) {
+  if (state?.status === "running" && state.vncPath) {
+    // The gateway runs on the same host the app was opened from (works from a phone or Tailscale too).
+    const base = `${window.location.protocol}//${window.location.hostname}:${state.gatewayPort}`;
     return (
       <iframe
-        src={`${state.vncUrl}&view_only=${interactive ? 0 : 1}&show_dot=${interactive ? 1 : 0}`}
+        src={`${base}${state.vncPath}&view_only=${interactive ? 0 : 1}&show_dot=${interactive ? 1 : 0}`}
         title={t.info.computer}
         className={cn("h-full w-full border-0 bg-black", !interactive && "pointer-events-none")}
       />

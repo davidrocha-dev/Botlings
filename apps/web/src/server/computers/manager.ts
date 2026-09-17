@@ -1,5 +1,7 @@
 import { randomBytes } from "node:crypto";
 import Docker from "dockerode";
+import { eq } from "drizzle-orm";
+import { db, schema } from "@/server/db";
 import { env } from "@/server/env";
 import type { ComputerState } from "@/lib/types";
 
@@ -16,7 +18,7 @@ const VNC_PORT = "6080/tcp";
 const docker = new Docker();
 
 type Runtime = { lastUsed: number; busy: number; starting?: Promise<RunningComputer> };
-type RunningComputer = { runnerUrl: string; vncUrl: string; token: string };
+type RunningComputer = { runnerUrl: string; token: string };
 
 const globalState = globalThis as unknown as {
   botlingsComputers?: Map<string, Runtime>;
@@ -73,7 +75,6 @@ function endpoints(info: Docker.ContainerInspectInfo): RunningComputer | null {
   if (!info.State.Running || !runner || !vnc || !token) return null;
   return {
     runnerUrl: `http://127.0.0.1:${runner}`,
-    vncUrl: `http://127.0.0.1:${vnc}/vnc.html?autoconnect=1&resize=scale&reconnect=1`,
     token,
   };
 }
@@ -83,7 +84,13 @@ export async function getComputer(agentId: string): Promise<ComputerState> {
   if (runtimes.get(agentId)?.starting) return { status: "starting" };
   const info = await inspect(agentId);
   const running = info && endpoints(info);
-  if (running) return { status: "running", vncUrl: running.vncUrl };
+  if (running) {
+    return {
+      status: "running",
+      vncPath: `/vnc/${agentId}/vnc.html?path=vnc/${agentId}/websockify&autoconnect=1&resize=scale&reconnect=1`,
+      gatewayPort: env.BOTLINGS_GATEWAY_PORT,
+    };
+  }
   if (!(await imageExists())) return { status: "no_image" };
   return { status: "stopped" };
 }
@@ -122,7 +129,7 @@ async function createContainer(agentId: string) {
     name: containerName(agentId),
     Image: env.BOTLINGS_AGENT_IMAGE,
     Hostname: "botling",
-    Env: [`BOTLINGS_RUNNER_TOKEN=${token}`],
+    Env: [`BOTLINGS_RUNNER_TOKEN=${token}`, `BOTLINGS_ALLOW_LAN=${env.BOTLINGS_COMPUTER_ALLOW_LAN ? 1 : 0}`],
     Labels: { [LABEL]: agentId, [TOKEN_LABEL]: token },
     ExposedPorts: { [RUNNER_PORT]: {}, [VNC_PORT]: {} },
     HostConfig: {
@@ -138,6 +145,9 @@ async function createContainer(agentId: string) {
       ShmSize: 512 * 1024 * 1024,
       SecurityOpt: ["no-new-privileges"],
       CapDrop: ["ALL"],
+      // Only needed by the entrypoint to install the LAN firewall and switch to the unprivileged
+      // user; every capability is dropped before the desktop and runner start.
+      CapAdd: ["NET_ADMIN", "NET_RAW", "SETUID", "SETGID"],
       RestartPolicy: { Name: "no" },
     },
   });
@@ -191,8 +201,13 @@ export async function stopComputer(agentId: string) {
 /** Deletes the container and its home volume (used when an agent is deleted). */
 export async function destroyComputer(agentId: string) {
   const info = await inspect(agentId);
-  if (info) await docker.getContainer(info.Id).remove({ force: true }).catch(() => {});
-  await docker.getVolume(volumeName(agentId)).remove().catch(() => {});
+  if (info) await docker.getContainer(info.Id).remove({ force: true });
+  await docker
+    .getVolume(volumeName(agentId))
+    .remove()
+    .catch((error: { statusCode?: number }) => {
+      if (error.statusCode !== 404) throw error;
+    });
   runtimes.delete(agentId);
 }
 
@@ -221,9 +236,41 @@ export async function callRunner<T>(agentId: string, route: string, body: unknow
   }
 }
 
-// Stop computers that have been idle for a while to free RAM.
+/**
+ * Finishes computer deletions that could not run when the agent was deleted (Docker was off).
+ * Only explicitly recorded deletions are processed — never "containers without an agent", which
+ * would wipe everything if the app were pointed at the wrong database.
+ */
+async function processPendingDeletions() {
+  const pending = await db.select().from(schema.pendingComputerDeletions);
+  for (const { agentId } of pending) {
+    await destroyComputer(agentId);
+    await db.delete(schema.pendingComputerDeletions).where(eq(schema.pendingComputerDeletions.agentId, agentId));
+  }
+}
+
+/** Destroys an agent's computer now, or queues it if Docker is unavailable. */
+export async function destroyComputerOrQueue(agentId: string) {
+  if (await dockerAvailable()) {
+    try {
+      await destroyComputer(agentId);
+      return;
+    } catch (error) {
+      console.error("[computers] destroy failed, queueing", error);
+    }
+  }
+  await db.insert(schema.pendingComputerDeletions).values({ agentId }).onConflictDoNothing();
+}
+
+let lastPendingSweep = 0;
+
+// Stop computers that have been idle for a while to free RAM; retry queued deletions every ~10 min.
 globalState.botlingsReaper ??= setInterval(async () => {
   if (!(await dockerAvailable())) return;
+  if (Date.now() - lastPendingSweep > 10 * 60_000) {
+    lastPendingSweep = Date.now();
+    await processPendingDeletions().catch((error) => console.error("[computers] pending deletions", error));
+  }
   const idleMs = env.BOTLINGS_COMPUTER_IDLE_MINUTES * 60_000;
   for (const agentId of await runningAgentIds().catch(() => [])) {
     const r = runtime(agentId);

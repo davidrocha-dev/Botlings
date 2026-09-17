@@ -72,6 +72,7 @@ export type ModelOption = {
 
 export type ComputerState = {
   status: "unavailable" | "no_image" | "stopped" | "starting" | "running";
-  /** noVNC page on the local machine when running. */
-  vncUrl?: string;
+  /** Path of the noVNC page on the screen gateway (same host as the app, `gatewayPort`). */
+  vncPath?: string;
+  gatewayPort?: number;
 };

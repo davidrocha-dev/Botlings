@@ -200,3 +200,43 @@ export async function seedWorkspace(ownerId: string) {
     greeting: "Hi! I'm Atlas, your chief of staff. Ask me anything, or create more Botlings to build your crew. 👋",
   });
 }
+
+export class ProtectedAgentError extends Error {
+  constructor() {
+    super("The orchestrator cannot be deleted");
+  }
+}
+
+/**
+ * Deletes an agent and its direct conversation. Group memberships are removed by cascade; the
+ * agent's past group messages stay, without an author. Returns the removed conversation ids, or
+ * null when the agent does not exist for this owner.
+ */
+export async function deleteAgent(ownerId: string, agentId: string) {
+  const [agent] = await db
+    .select({ id: schema.agents.id, isOrchestrator: schema.agents.isOrchestrator })
+    .from(schema.agents)
+    .where(and(eq(schema.agents.id, agentId), eq(schema.agents.ownerId, ownerId)));
+  if (!agent) return null;
+  if (agent.isOrchestrator) throw new ProtectedAgentError();
+
+  return db.transaction(async (tx) => {
+    const direct = await tx
+      .select({ id: schema.conversations.id })
+      .from(schema.conversations)
+      .innerJoin(schema.conversationMembers, eq(schema.conversationMembers.conversationId, schema.conversations.id))
+      .where(
+        and(
+          eq(schema.conversations.ownerId, ownerId),
+          eq(schema.conversations.type, "direct"),
+          eq(schema.conversationMembers.agentId, agentId),
+        ),
+      );
+    const conversationIds = direct.map((c) => c.id);
+    if (conversationIds.length) {
+      await tx.delete(schema.conversations).where(inArray(schema.conversations.id, conversationIds));
+    }
+    await tx.delete(schema.agents).where(eq(schema.agents.id, agentId));
+    return conversationIds;
+  });
+}

@@ -1,7 +1,12 @@
 "use client";
 
+import { useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { motion } from "motion/react";
-import { Coins, Cpu, Wallet, X } from "lucide-react";
+import { Coins, Cpu, FolderOpen, Pencil, Trash2, Wallet, X } from "lucide-react";
+import { WorkspaceDialog } from "./workspace-dialog";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ModelPicker } from "@/components/agents/model-picker";
 import { BotlingAvatar } from "@/components/avatar/botling-avatar";
 import { ConversationAvatar } from "@/components/avatar/conversation-avatar";
@@ -27,8 +32,33 @@ function Stat({ icon, label, value }: { icon: React.ReactNode; label: string; va
 }
 
 function AgentDetails({ agent }: { agent: Agent }) {
-  const { t } = useI18n();
-  const { upsertAgent } = useStore();
+  const { t, f } = useI18n();
+  const { upsertAgent, removeAgent } = useStore();
+  const router = useRouter();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const remove = async () => {
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      const res = await fetch(`/api/agents/${agent.id}`, { method: "DELETE" });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError(data.error === "orchestrator" ? t.agent.cannotDeleteOrchestrator : t.agent.errors.generic);
+        return;
+      }
+      setConfirmOpen(false);
+      router.push("/");
+      removeAgent(agent.id, data.removedConversationIds ?? []);
+    } catch {
+      setDeleteError(t.agent.errors.generic);
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   // Explicit model change made by the user from the UI.
   const changeModel = async (model: string) => {
@@ -59,6 +89,15 @@ function AgentDetails({ agent }: { agent: Agent }) {
       <section className="space-y-2">
         <h3 className="text-[11px] font-semibold tracking-wide text-subtle uppercase">{t.info.computer}</h3>
         <VmPreview agent={agent} />
+        <button
+          type="button"
+          onClick={() => setWorkspaceOpen(true)}
+          className="inline-flex h-9 w-full items-center justify-center gap-2 rounded-xl bg-surface text-sm font-medium text-muted transition-colors hover:bg-surface-2 hover:text-text"
+        >
+          <FolderOpen className="size-4" />
+          {t.workspace.open}
+        </button>
+        <WorkspaceDialog agent={agent} open={workspaceOpen} onClose={() => setWorkspaceOpen(false)} />
       </section>
 
       {agent.role && (
@@ -80,6 +119,42 @@ function AgentDetails({ agent }: { agent: Agent }) {
         <Stat icon={<Wallet className="size-3.5" />} label={t.info.spendToday} value={formatUsd(agent.spendTodayUsd)} />
         <Stat icon={<Coins className="size-3.5" />} label={t.info.tokensToday} value={agent.tokensToday.toLocaleString()} />
       </div>
+
+      <div className="flex gap-2 border-t border-border pt-4">
+        <Link
+          href={`/agents/${agent.id}/edit`}
+          className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-2xl border border-border-strong text-sm font-medium transition-colors hover:bg-surface"
+        >
+          <Pencil className="size-4" />
+          {t.agent.edit}
+        </Link>
+        {!agent.isOrchestrator && (
+          <button
+            type="button"
+            onClick={() => {
+              setDeleteError(null);
+              setConfirmOpen(true);
+            }}
+            className="inline-flex h-10 flex-1 items-center justify-center gap-2 rounded-2xl border border-danger/30 text-sm font-medium text-danger transition-colors hover:bg-danger/10"
+          >
+            <Trash2 className="size-4" />
+            {t.agent.delete}
+          </button>
+        )}
+      </div>
+      {agent.isOrchestrator && <p className="text-center text-xs text-subtle">{t.agent.cannotDeleteOrchestrator}</p>}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={f(t.agent.deleteTitle, { name: agent.name })}
+        description={t.agent.deleteDescription}
+        confirmLabel={deleting ? t.agent.deleting : t.agent.delete}
+        cancelLabel={t.agent.cancel}
+        pending={deleting}
+        error={deleteError}
+        onConfirm={remove}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </div>
   );
 }

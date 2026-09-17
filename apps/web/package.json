@@ -3,9 +3,13 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
+    "dev": "pnpm run \"/^dev:/\"",
+    "dev:next": "next dev",
+    "dev:gateway": "tsx watch --tsconfig tsconfig.json src/gateway/server.ts",
     "build": "next build",
-    "start": "next start",
+    "start": "pnpm run \"/^start:/\"",
+    "start:next": "next start",
+    "start:gateway": "tsx --tsconfig tsconfig.json src/gateway/server.ts",
     "lint": "eslint",
     "typecheck": "next typegen && tsc --noEmit"
   },
