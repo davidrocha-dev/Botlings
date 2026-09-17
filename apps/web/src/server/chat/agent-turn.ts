@@ -64,7 +64,8 @@ export type TurnOptions = {
   routineName?: string;
 };
 
-export type TurnResult = { content: string; costUsd: number; error?: string };
+/** `content`: everything the agent wrote this turn (progress notes included); `finalContent`: only its last message. */
+export type TurnResult = { content: string; finalContent: string; costUsd: number; error?: string };
 
 export class CostLimitError extends Error {
   constructor(limit: number) {
@@ -499,7 +500,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
     void updateConversationSummary(conversationId, HISTORY_LIMIT, conversation.names).catch(() => {});
     const [fresh] = await db.select().from(schema.agents).where(eq(schema.agents.id, agent.id));
     if (fresh) emit({ type: "agent", agent: await getAgentDto(fresh) });
-    return { content: fullContent.trim(), costUsd: usage.cost ?? 0 };
+    return { content: fullContent.trim(), finalContent: content.trim(), costUsd: usage.cost ?? 0 };
   } catch (error) {
     const reason = signal.aborted
       ? String(signal.reason instanceof Error ? signal.reason.message : (signal.reason ?? "Aborted"))
@@ -532,7 +533,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
     });
     await recordUsage(agent, modelUsed, usage);
     void updateConversationSummary(conversationId, HISTORY_LIMIT, conversation.names).catch(() => {});
-    return { content: fullContent.trim(), costUsd: usage.cost ?? 0, error: reason };
+    return { content: fullContent.trim(), finalContent: content.trim(), costUsd: usage.cost ?? 0, error: reason };
   }
 }
 

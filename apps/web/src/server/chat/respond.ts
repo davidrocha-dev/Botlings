@@ -60,8 +60,8 @@ export async function handleUserMessage(options: {
       userText: text,
       onDelegate: agent.isOrchestrator ? createDelegator({ orchestrator: agent, conversationId, requestId, emit }) : undefined,
     });
-    if (!result.error && result.content) {
-      void notify(userId, { type: "reply", agentName: agent.name, text: result.content, conversationId });
+    if (!result.error && result.finalContent) {
+      void notify(userId, { type: "reply", agentName: agent.name, text: result.finalContent, conversationId });
     }
   } finally {
     await endRequest?.();

@@ -112,7 +112,7 @@ export async function runRoutine(routineId: string, trigger: "schedule" | "manua
       extraMessages: [{ role: "user", content: `[Scheduled routine "${routine.name}"] ${routine.instruction}` }],
     });
     status = result.error ? "failed" : "completed";
-    summary = result.error ?? result.content;
+    summary = result.error ?? (result.finalContent || result.content);
     await db
       .update(schema.routineRuns)
       .set({ status, result: result.content || null, error: result.error ?? null, costUsd: result.costUsd, finishedAt: new Date() })

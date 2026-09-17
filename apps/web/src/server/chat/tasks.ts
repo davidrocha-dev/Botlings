@@ -164,8 +164,8 @@ async function maybeSummarize(requestId: string) {
     mode: "summary",
     extraMessages: [{ role: "user", content: `[Delegated task results]\n\n${report}` }],
   });
-  if (!result.error && result.content) {
-    await notify(first.ownerId, { type: "reply", agentName: orchestrator.name, text: result.content, conversationId });
+  if (!result.error && result.finalContent) {
+    await notify(first.ownerId, { type: "reply", agentName: orchestrator.name, text: result.finalContent, conversationId });
   }
 }
 
