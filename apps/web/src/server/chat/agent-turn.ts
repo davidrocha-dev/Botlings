@@ -199,7 +199,7 @@ ${opts.conversationSummary}`,
         `You are in a group chat with the user and these Botlings: ${opts.memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets (that label is added by the app: never start your own message with your name or any label). Only speak for yourself; never write lines for the others.`,
         opts.groupDescription && `What this group is for: ${opts.groupDescription}`,
         opts.discussion &&
-          "This is a moderated discussion: a moderator gives the floor to one Botling at a time. When it is your turn, add only what is new from your own area of expertise, in a few sentences. Don't open by agreeing with or recapping the others (no \"I fully agree with…\"), and don't repeat questions already asked to the user. You may question or correct a teammate by name. If you have nothing new to add, say so in one short sentence. Write only in the conversation's language — never mix in words from other languages or scripts.",
+          "This is a moderated discussion: a moderator gives the floor to one Botling at a time. When it is your turn, add only what is new from your own area of expertise, in a few sentences. Don't open by agreeing with or recapping the others (no \"I fully agree with…\"), and don't repeat questions already asked to the user. You may question or correct a teammate by name. If you have nothing new to add, say so in one short sentence. Never declare a decision as taken or promise to do things outside your area: recommend, and let the user decide. Write only in the conversation's language — never mix in words from other languages or scripts.",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -217,6 +217,16 @@ ${opts.conversationSummary}`,
   ]
     .filter(Boolean)
     .join("\n\n");
+}
+
+/** Group replies: no leading "[Me]:" label, and "[Clause]" / "@[Clause]" mentions become plain names. */
+function tidyGroupReply(text: string, name: string, memberNames: string[]) {
+  let tidy = stripSelfLabel(text, name);
+  for (const member of memberNames) {
+    const escaped = member.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    tidy = tidy.replace(new RegExp(`@?\\[(${escaped})\\]`, "g"), "$1");
+  }
+  return tidy;
 }
 
 function stripSelfLabel(text: string, name: string) {
@@ -342,9 +352,10 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
   const team = await loadTeam(agent);
   const canDelegate = supportsTools && mode === "chat" && agent.isOrchestrator && !!opts.onDelegate && team.length > 0;
   // Preferences come from talking with the user, so proposals are only offered in chat mode.
-  const canPropose = supportsTools && mode === "chat";
+  // Changing one's own instructions or proposing routines belongs in the agent's own chat, not in group discussions.
+  const canPropose = supportsTools && mode === "chat" && conversation.type === "direct";
   const canRemember = supportsTools && mode !== "summary";
-  const canSuggestRoutine = supportsTools && mode === "chat";
+  const canSuggestRoutine = supportsTools && mode === "chat" && conversation.type === "direct";
   const memories = await listMemories(agent.id);
   const [conversationRow] = await db
     .select({ summary: schema.conversations.summary, contextStartedAt: schema.conversations.contextStartedAt })
@@ -419,7 +430,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
 
       if (opts.costLimitUsd !== undefined && (usage.cost ?? 0) > opts.costLimitUsd) throw new CostLimitError(opts.costLimitUsd);
       // Models in group chats tend to copy the "[Name]:" labels from the history; drop them.
-      if (conversation.type === "group") content = stripSelfLabel(content, agent.name);
+      if (conversation.type === "group") content = tidyGroupReply(content, agent.name, [...conversation.names.values()]);
       if (!calls.length) break;
 
       messages.push({ role: "assistant", content: roundText || null, tool_calls: calls });

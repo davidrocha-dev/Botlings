@@ -53,7 +53,8 @@ export async function createProposal(agent: AgentRow, conversationId: string, ar
   if (after.length > MAX_INSTRUCTIONS_LENGTH) {
     return { toolResult: `Refused: instructions must be at most ${MAX_INSTRUCTIONS_LENGTH} characters.` };
   }
-  if (after === agent.prompt.trim()) return { toolResult: "Refused: that is identical to your current instructions." };
+  const squash = (value: string) => value.replace(/\s+/g, " ").trim();
+  if (squash(after) === squash(agent.prompt)) return { toolResult: "Refused: that is identical to your current instructions." };
 
   // A newer proposal supersedes any pending one for the same agent.
   const superseded = await db

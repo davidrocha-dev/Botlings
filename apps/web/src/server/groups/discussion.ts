@@ -44,7 +44,7 @@ async function transcript(conversationId: string, since: Date | null, names: Map
 
 /**
  * Asks the moderator who speaks next. Returns an agent, or null when the discussion is done.
- * Falls back to letting each member speak once (in order) if the moderator model is unavailable.
+ * If the moderator model is unavailable, the orchestrator (or first member) replies once.
  */
 export async function pickNextSpeaker(opts: {
   group: Pick<GroupRow, "id" | "title" | "description" | "contextStartedAt">;
@@ -53,7 +53,8 @@ export async function pickNextSpeaker(opts: {
   spoken: string[];
 }): Promise<AgentRow | null> {
   const { members, spoken } = opts;
-  const fallback = () => (spoken.length === 0 ? (members.find((a) => a.isOrchestrator) ?? members[0]) : (members.find((a) => !spoken.includes(a.id)) ?? null));
+  // Without a moderator, never hand the word to everyone: one reply, then the user steers (or @mentions).
+  const fallback = () => (spoken.length === 0 ? (members.find((a) => a.isOrchestrator) ?? members[0]) : null);
 
   const roster = members.map((a) => `- ${a.name}: ${a.role || "(no role)"}`).join("\n");
   const turns = spoken.map((id) => opts.names.get(id) ?? "?");
@@ -85,9 +86,13 @@ export async function pickNextSpeaker(opts: {
     timeoutMs: 30_000,
     accept: (text) => /"next"\s*:/.test(text),
   });
-  if ("error" in result) return fallback();
+  if ("error" in result) {
+    console.warn(`[moderator] unavailable (${result.error}); using fallback`);
+    return fallback();
+  }
 
   const raw = result.text.match(/"next"\s*:\s*"([^"]*)"/)?.[1]?.trim() ?? "";
+  console.info(`[moderator] ${result.model} → ${raw || "?"}`);
   if (!raw || raw.toUpperCase() === "DONE") return spoken.length === 0 ? fallback() : null;
   const wanted = raw.toLowerCase();
   return members.find((a) => a.name.toLowerCase() === wanted) ?? members.find((a) => wanted.includes(a.name.toLowerCase())) ?? fallback();
