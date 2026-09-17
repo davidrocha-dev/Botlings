@@ -3,6 +3,7 @@ import { db, schema } from "@/server/db";
 import { toMessageDto } from "@/server/data";
 import { publish } from "@/server/events";
 import { TASK_LIMITS, runAgentTurn, saveMessage, type AgentRow, type Emit } from "./agent-turn";
+import { isStopped, trackGeneration } from "./generations";
 import type { TaskStatus } from "@/server/db/schema";
 import { notify } from "@/server/notifications/notify";
 
@@ -68,6 +69,8 @@ async function runTask(taskId: string) {
 
   const controller = new AbortController();
   controllers.set(task.id, controller);
+  // /stop in the target agent's chat stops the task too.
+  const untrack = task.targetConversationId ? trackGeneration(task.targetConversationId, controller) : () => {};
   const timeout = setTimeout(() => controller.abort(new Error("Timed out")), TASK_LIMITS.timeoutMs);
 
   try {
@@ -102,7 +105,7 @@ async function runTask(taskId: string) {
       costLimitUsd: TASK_LIMITS.costLimitUsd,
     });
 
-    if (controller.signal.aborted && (controller.signal.reason as Error | undefined)?.message === "Cancelled") {
+    if (isStopped(controller.signal) || (controller.signal.aborted && (controller.signal.reason as Error | undefined)?.message === "Cancelled")) {
       await finishTask(task.id, "cancelled", { result: result.content || undefined, costUsd: result.costUsd });
     } else if (result.error) {
       await finishTask(task.id, "failed", { error: result.error, result: result.content || undefined, costUsd: result.costUsd });
@@ -113,6 +116,7 @@ async function runTask(taskId: string) {
     await finishTask(task.id, "failed", { error: error instanceof Error ? error.message : "Task failed" });
   } finally {
     clearTimeout(timeout);
+    untrack();
     controllers.delete(task.id);
     await maybeSummarize(task.requestId).catch((error) => console.error("[tasks] summary", error));
   }

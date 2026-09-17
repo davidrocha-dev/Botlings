@@ -111,12 +111,20 @@ const SUMMARY_BATCH = 20;
  */
 export async function updateConversationSummary(conversationId: string, historyLimit: number, names: Map<string, string>) {
   const [conversation] = await db
-    .select({ summary: schema.conversations.summary, summaryUntil: schema.conversations.summaryUntil })
+    .select({
+      summary: schema.conversations.summary,
+      summaryUntil: schema.conversations.summaryUntil,
+      contextStartedAt: schema.conversations.contextStartedAt,
+    })
     .from(schema.conversations)
     .where(eq(schema.conversations.id, conversationId));
   if (!conversation) return;
 
-  const textOnly = and(eq(schema.messages.conversationId, conversationId), eq(schema.messages.kind, "text"));
+  const textOnly = and(
+    eq(schema.messages.conversationId, conversationId),
+    eq(schema.messages.kind, "text"),
+    conversation.contextStartedAt ? gt(schema.messages.createdAt, conversation.contextStartedAt) : undefined,
+  );
   // The oldest message still inside the window.
   const window = await db
     .select({ createdAt: schema.messages.createdAt })

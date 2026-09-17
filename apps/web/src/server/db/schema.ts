@@ -97,6 +97,8 @@ export const conversations = pgTable(
     summary: text("summary").notNull().default(""),
     /** Messages created at or before this instant are covered by `summary`. */
     summaryUntil: timestamp("summary_until", { withTimezone: true }),
+    /** Set by /new: older messages are kept but no longer sent to the model. */
+    contextStartedAt: timestamp("context_started_at", { withTimezone: true }),
     ...timestamps,
   },
   (t) => [index("conversations_owner_idx").on(t.ownerId)],
@@ -149,6 +151,9 @@ export type MessageMetadata = {
   routineRunStatus?: "running" | "completed" | "failed";
   routineSuggestion?: "pending" | "enabled" | "discarded";
   routineCron?: string;
+  /** Slash command replies (kind "command"). */
+  command?: string;
+  pendingApprovals?: { id: string; agentName: string; detail: string }[];
 };
 
 export type ApprovalStatus = "pending" | "approved" | "denied" | "expired";
@@ -164,7 +169,7 @@ export const messages = pgTable(
       .references(() => conversations.id, { onDelete: "cascade" }),
     authorType: text("author_type", { enum: ["user", "agent"] }).notNull(),
     agentId: uuid("agent_id").references(() => agents.id, { onDelete: "set null" }),
-    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal", "approval", "memory", "routine"] })
+    kind: text("kind", { enum: ["text", "event", "error", "tool", "task", "proposal", "approval", "memory", "routine", "command"] })
       .notNull()
       .default("text"),
     content: text("content").notNull(),

@@ -30,7 +30,7 @@ export type Message = {
   author: MessageAuthor;
   text: string;
   createdAt: number;
-  kind: "text" | "event" | "error" | "tool" | "task" | "proposal" | "approval" | "memory" | "routine";
+  kind: "text" | "event" | "error" | "tool" | "task" | "proposal" | "approval" | "memory" | "routine" | "command";
   model?: string | null;
   costUsd?: number | null;
   metadata?: {
@@ -60,6 +60,8 @@ export type Message = {
     routineRunStatus?: "running" | "completed" | "failed";
     routineSuggestion?: "pending" | "enabled" | "discarded";
     routineCron?: string;
+    command?: string;
+    pendingApprovals?: { id: string; agentName: string; detail: string }[];
   } | null;
   /** True while the reply is still streaming. */
   streaming?: boolean;

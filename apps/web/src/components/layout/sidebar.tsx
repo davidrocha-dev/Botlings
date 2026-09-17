@@ -83,6 +83,8 @@ export function Sidebar() {
                   ? t.proposals.title
                   : last.kind === "task"
                   ? `${t.tasks.status[last.metadata?.taskStatus ?? "running"]}: ${stripMarkdown(last.text)}`
+                  : last.kind === "command"
+                  ? stripMarkdown(last.text)
                   : last.kind === "tool"
                   ? `${t.tools[last.metadata?.tool as keyof typeof t.tools] ?? ""} ${last.text}`
                   : `${conversation.type === "group" && lastAuthor ? `${lastAuthor}: ` : ""}${stripMarkdown(last.text)}`

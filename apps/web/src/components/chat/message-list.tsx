@@ -12,6 +12,7 @@ import type { Conversation, Message } from "@/lib/types";
 import { cn } from "@/lib/cn";
 import { ApprovalCard } from "./approval-card";
 import { Markdown } from "./markdown";
+import { CommandRow } from "./command-row";
 import { ProposalCard } from "./proposal-card";
 import { RoutineCard } from "./routine-card";
 import { TaskCard } from "./task-card";
@@ -194,6 +195,7 @@ export function MessageList({ conversation }: { conversation: Conversation }) {
             if (message.kind === "approval") return <ApprovalCard key={message.id} message={message} />;
             if (message.kind === "memory") return <MemoryRow key={message.id} message={message} />;
             if (message.kind === "routine") return <RoutineCard key={message.id} message={message} />;
+            if (message.kind === "command" && message.author.type === "agent") return <CommandRow key={message.id} message={message} />;
 
             const prev = list[index - 1];
             const next = list[index + 1];

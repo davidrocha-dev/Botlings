@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ne } from "drizzle-orm";
 import { db, schema } from "@/server/db";
 import { getAgentDto } from "@/server/data";
 import { env } from "@/server/env";
@@ -19,6 +19,7 @@ import { BudgetExceededError, assertWithinBudget } from "@/server/usage/usage";
 import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
 import { MEMORY_TOOLS, MEMORY_TOOL_NAMES, executeMemoryTool, listMemories, memorySection, updateConversationSummary, type MemoryRow } from "./memory";
 import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
+import { isStopped } from "./generations";
 import { saveMessage } from "./save-message";
 import { SUGGEST_ROUTINE_TOOL, suggestRoutine } from "@/server/routines/suggest";
 import type { ChatStreamEvent } from "@/lib/types";
@@ -205,11 +206,17 @@ ${opts.conversationSummary}`,
     .join("\n\n");
 }
 
-async function buildHistory(conversationId: string, agent: AgentRow, names: Map<string, string>) {
+async function buildHistory(conversationId: string, agent: AgentRow, names: Map<string, string>, since: Date | null) {
   const rows = await db
     .select()
     .from(schema.messages)
-    .where(and(eq(schema.messages.conversationId, conversationId), eq(schema.messages.kind, "text")))
+    .where(
+      and(
+        eq(schema.messages.conversationId, conversationId),
+        eq(schema.messages.kind, "text"),
+        since ? gt(schema.messages.createdAt, since) : undefined,
+      ),
+    )
     .orderBy(desc(schema.messages.createdAt))
     .limit(HISTORY_LIMIT);
 
@@ -322,7 +329,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
   const canSuggestRoutine = supportsTools && mode === "chat";
   const memories = await listMemories(agent.id);
   const [conversationRow] = await db
-    .select({ summary: schema.conversations.summary })
+    .select({ summary: schema.conversations.summary, contextStartedAt: schema.conversations.contextStartedAt })
     .from(schema.conversations)
     .where(eq(schema.conversations.id, conversationId));
 
@@ -358,7 +365,7 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         canSuggestRoutine,
       }),
     },
-    ...(await buildHistory(conversationId, agent, conversation.names)),
+    ...(await buildHistory(conversationId, agent, conversation.names, conversationRow?.contextStartedAt ?? null)),
     ...(opts.extraMessages ?? []),
   ];
 
@@ -516,7 +523,8 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         message: await saveMessage({ conversationId, authorType: "agent", agentId: agent.id, content: content.trim(), model: modelUsed }),
       });
     }
-    emit({
+    // Stopped with /stop: no error card, the user asked for it.
+    if (!isStopped(signal)) emit({
       type: "message",
       message: await saveMessage({
         conversationId,

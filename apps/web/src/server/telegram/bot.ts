@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { and, asc, eq, or } from "drizzle-orm";
 import { decideApproval, type ApprovalDecision } from "@/server/approvals/approvals";
 import { rateLimit } from "@/server/auth/rate-limit";
+import { commandHelpText, parseCommand, type PendingApproval } from "@/server/chat/commands";
 import { handleUserMessage } from "@/server/chat/respond";
 import { db, schema } from "@/server/db";
 import { publish } from "@/server/events";
@@ -42,7 +43,7 @@ const TEXT = {
     badCode: "That link has expired or was already used. Create a new one in Botlings → Notifications.",
     linked: (name: string) => `Connected to Botlings as ${name}. 👋`,
     help: (agent: string) =>
-      `You're talking to ${agent}.\n\n/agents — list your agents\n/agent <name> — talk to another agent\n/agent — back to the orchestrator\n/unlink — disconnect this chat`,
+      `You're talking to ${agent}.\n\n/agents — list your agents\n/agent <name> — talk to another agent\n/agent — back to the orchestrator\n/unlink — disconnect this chat\n${commandHelpText("en")}`,
     agents: "Your agents:",
     current: "current",
     switched: (name: string) => `Now talking to ${name}.`,
@@ -61,7 +62,7 @@ const TEXT = {
     badCode: "Esse link expirou ou já foi usado. Cria um novo no Botlings → Notificações.",
     linked: (name: string) => `Ligado ao Botlings como ${name}. 👋`,
     help: (agent: string) =>
-      `Estás a falar com ${agent}.\n\n/agentes — lista os teus agentes\n/agente <nome> — falar com outro agente\n/agente — voltar ao orquestrador\n/desligar — desligar este chat`,
+      `Estás a falar com ${agent}.\n\n/agentes — lista os teus agentes\n/agente <nome> — falar com outro agente\n/agente — voltar ao orquestrador\n/desligar — desligar este chat\n${commandHelpText("pt")}`,
     agents: "Os teus agentes:",
     current: "atual",
     switched: (name: string) => `Agora estás a falar com ${name}.`,
@@ -240,8 +241,6 @@ async function handleMessage(message: TelegramMessage) {
     case "ajuda":
       return void (await sendText(chatId, t.help((await activeAgent(link))?.name ?? "Botlings")));
   }
-  // Unknown slash commands (except /model, which agents understand) show the help.
-  if (command && command !== "model") return void (await sendText(chatId, t.help((await activeAgent(link))?.name ?? "Botlings")));
 
   const agent = await activeAgent(link);
   const conversationId = agent && (await directConversationId(agent.id));
@@ -251,26 +250,31 @@ async function handleMessage(message: TelegramMessage) {
   const typing = () => tg("sendChatAction", { chat_id: chatId, action: "typing" }).catch(() => {});
   void typing();
   const timer = setInterval(typing, 4500);
-  const notices: string[] = [];
+  const notices: { text: string; markdown: boolean; approvals?: PendingApproval[] }[] = [];
   try {
     await handleUserMessage({
       userId: link.userId,
       conversationId,
       text,
+      locale: link.locale,
       signal: new AbortController().signal,
       emit: (event) => {
         // The web app sees the conversation live too.
         publish(link.userId, conversationId, event);
-        if (event.type === "message" && (event.message.kind === "error" || event.message.kind === "event")) {
-          notices.push(event.message.text);
-        }
+        if (event.type !== "message") return;
+        const { kind, text: body, metadata } = event.message;
+        if (kind === "error" || kind === "event") notices.push({ text: body, markdown: false });
+        if (kind === "command") notices.push({ text: body, markdown: true, approvals: metadata?.pendingApprovals });
       },
     });
   } finally {
     clearInterval(timer);
   }
   // Replies arrive through the notification channel below; errors and model changes are sent here.
-  for (const notice of notices) await sendText(chatId, notice);
+  for (const notice of notices) {
+    await sendText(chatId, notice.text, undefined, { markdown: notice.markdown });
+    for (const approval of notice.approvals ?? []) await sendApproval(link, approval);
+  }
 }
 
 async function handleCallback(query: TelegramCallbackQuery) {
@@ -296,17 +300,39 @@ async function handleCallback(query: TelegramCallbackQuery) {
 }
 
 function dispatch(update: TelegramUpdate) {
-  if (update.message) enqueue(String(update.message.chat.id), () => handleMessage(update.message!));
+  const message = update.message;
+  if (message) {
+    if (parseCommand(message.text ?? "")?.name === "stop") void handleMessage(message).catch((error) => console.error("[telegram]", error));
+    else enqueue(String(message.chat.id), () => handleMessage(message));
+  }
   else if (update.callback_query) void handleCallback(update.callback_query).catch((error) => console.error("[telegram] callback", error));
 }
 
 // ── Outgoing (notification channel) ────────────────────────────────────────
 
+/** An approval request with Allow once / Always allow / Deny buttons. */
+async function sendApproval(link: typeof schema.telegramLinks.$inferSelect, approval: PendingApproval) {
+  const lang = langOf(link.locale);
+  const t = TEXT[lang];
+  const { title } = notificationText(
+    { type: "approval", agentName: approval.agentName, detail: approval.detail, conversationId: "", approvalId: approval.id },
+    lang,
+  );
+  await sendText(link.chatId, `🔐 ${title}\n\n${approval.detail}`, {
+    inline_keyboard: [
+      [
+        { text: t.allowOnce, callback_data: `ap:${approval.id}:approve` },
+        { text: t.alwaysAllow, callback_data: `ap:${approval.id}:always` },
+      ],
+      [{ text: t.deny, callback_data: `ap:${approval.id}:deny` }],
+    ],
+  });
+}
+
 const telegramChannel: NotificationChannel = async (userId, event, ctx) => {
   const [link] = await db.select().from(schema.telegramLinks).where(eq(schema.telegramLinks.userId, userId));
   if (!link || !state.running) return false;
   const lang = langOf(link.locale);
-  const t = TEXT[lang];
   const bound = isBound(event.conversationId);
 
   if (event.type === "reply") {
@@ -320,16 +346,7 @@ const telegramChannel: NotificationChannel = async (userId, event, ctx) => {
 
   if (event.type === "approval") {
     if (!bound && (!ctx.enabled || ctx.present)) return false;
-    const { title } = notificationText(event, lang);
-    await sendText(link.chatId, `🔐 ${title}\n\n${event.detail}`, {
-      inline_keyboard: [
-        [
-          { text: t.allowOnce, callback_data: `ap:${event.approvalId}:approve` },
-          { text: t.alwaysAllow, callback_data: `ap:${event.approvalId}:always` },
-        ],
-        [{ text: t.deny, callback_data: `ap:${event.approvalId}:deny` }],
-      ],
-    });
+    await sendApproval(link, { id: event.approvalId, agentName: event.agentName, detail: event.detail });
     return bound;
   }
 
@@ -385,6 +402,15 @@ export async function startTelegramBot() {
       commands: [
         { command: "agents", description: "List your agents" },
         { command: "agent", description: "Talk to an agent: /agent <name>" },
+        { command: "new", description: "Start a new topic" },
+        { command: "stop", description: "Stop what the agent is doing" },
+        { command: "status", description: "Tasks, routines and approvals in progress" },
+        { command: "approvals", description: "Actions waiting for you" },
+        { command: "cost", description: "Spend today and this month" },
+        { command: "model", description: "Show or change the model" },
+        { command: "memory", description: "What the agent remembers" },
+        { command: "routines", description: "Your routines" },
+        { command: "routine", description: "Run a routine now: /routine <name>" },
         { command: "help", description: "How to use the bot" },
         { command: "unlink", description: "Disconnect this chat" },
       ],
@@ -394,6 +420,15 @@ export async function startTelegramBot() {
       commands: [
         { command: "agentes", description: "Lista os teus agentes" },
         { command: "agente", description: "Falar com um agente: /agente <nome>" },
+        { command: "novo", description: "Começar um assunto novo" },
+        { command: "parar", description: "Parar o que o agente está a fazer" },
+        { command: "estado", description: "Tarefas, rotinas e aprovações em curso" },
+        { command: "aprovacoes", description: "Ações à tua espera" },
+        { command: "custo", description: "Gasto de hoje e do mês" },
+        { command: "modelo", description: "Ver ou mudar o modelo" },
+        { command: "memoria", description: "O que o agente sabe sobre ti" },
+        { command: "rotinas", description: "As tuas rotinas" },
+        { command: "rotina", description: "Correr uma rotina: /rotina <nome>" },
         { command: "ajuda", description: "Como usar o bot" },
         { command: "desligar", description: "Desligar este chat" },
       ],

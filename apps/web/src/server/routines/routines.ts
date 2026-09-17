@@ -3,6 +3,7 @@ import { db, schema } from "@/server/db";
 import { toMessageDto } from "@/server/data";
 import { publish } from "@/server/events";
 import { runAgentTurn } from "@/server/chat/agent-turn";
+import { trackGeneration } from "@/server/chat/generations";
 import { saveMessage } from "@/server/chat/save-message";
 import { nextRuns } from "./schedule";
 
@@ -98,6 +99,7 @@ export async function runRoutine(routineId: string, trigger: "schedule" | "manua
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(new Error("Routine timed out")), RUN_TIMEOUT_MS);
+  const untrack = trackGeneration(conversationId, controller);
   let status: "completed" | "failed" = "failed";
   let summary = "";
   try {
@@ -125,6 +127,7 @@ export async function runRoutine(routineId: string, trigger: "schedule" | "manua
       .where(eq(schema.routineRuns.id, run.id));
   } finally {
     clearTimeout(timeout);
+    untrack();
     running.delete(routineId);
     await updateRunCard(card.id, routine.ownerId, { routineRunStatus: status });
   }

@@ -3,6 +3,7 @@ import { getCurrentUser } from "@/server/auth/session";
 import { handleUserMessage } from "@/server/chat/respond";
 import { getMessages, getOwnedConversation } from "@/server/data";
 import { rateLimit } from "@/server/auth/rate-limit";
+import { getLocale } from "@/lib/i18n/server";
 import type { ChatStreamEvent } from "@/lib/types";
 
 export async function GET(_request: Request, ctx: RouteContext<"/api/conversations/[id]/messages">) {
@@ -32,6 +33,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
   }
   if (!(await getOwnedConversation(user.id, id))) return Response.json({ error: "Not found" }, { status: 404 });
 
+  const locale = await getLocale();
   const encoder = new TextEncoder();
   // Generation is not tied to the HTTP request: if the client disconnects, the reply is still saved.
   const generation = new AbortController();
@@ -48,7 +50,7 @@ export async function POST(request: Request, ctx: RouteContext<"/api/conversatio
         }
       };
       try {
-        await handleUserMessage({ userId: user.id, conversationId: id, text: parsed.data.text, emit, signal: generation.signal });
+        await handleUserMessage({ userId: user.id, conversationId: id, text: parsed.data.text, emit, signal: generation.signal, locale });
       } catch (error) {
         console.error("[chat]", error);
       } finally {
