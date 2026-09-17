@@ -77,6 +77,8 @@ export const agents = pgTable(
     isOrchestrator: boolean("is_orchestrator").notNull().default(false),
     /** ask_always: every action on the computer needs approval; ask_sensitive: only risky ones. */
     autonomy: text("autonomy", { enum: ["ask_always", "ask_sensitive", "autonomous"] }).notNull().default("ask_sensitive"),
+    /** Look up checkable facts (prices, dates, contacts…) online instead of guessing. */
+    webResearch: boolean("web_research").notNull().default(true),
     ...timestamps,
   },
   (t) => [index("agents_owner_idx").on(t.ownerId)],

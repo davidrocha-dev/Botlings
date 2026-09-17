@@ -11,6 +11,7 @@ export type Agent = {
   appearance: BotlingAppearance;
   isOrchestrator: boolean;
   autonomy: Autonomy;
+  webResearch: boolean;
   /** Live state; derived on the client from in-flight requests for now. */
   status: AgentStatus;
   spendTodayUsd: number;

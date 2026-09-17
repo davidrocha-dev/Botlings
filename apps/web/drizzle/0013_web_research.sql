@@ -1,0 +1,1 @@
+ALTER TABLE "agents" ADD COLUMN "web_research" boolean DEFAULT true NOT NULL;

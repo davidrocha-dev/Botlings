@@ -181,6 +181,11 @@ const en = {
       ask_sensitive: { label: "Ask for risky actions", description: "Purchases, sending, publishing, deleting… wait for your OK." },
       autonomous: { label: "Autonomous", description: "Acts without asking. Use only for agents you trust." },
     },
+    research: {
+      title: "Internet",
+      label: "Research online",
+      description: "Looks up prices, dates, venues and contacts in its browser instead of guessing. Uses its computer and a few more tokens.",
+    },
     rules: { title: "Always allowed", empty: "Nothing yet. Choose “Always allow” on an approval to add it here.", remove: "Remove" },
     editTitle: "Edit Botling",
     editSubtitle: "Change its look, job, instructions or model.",
@@ -647,6 +652,11 @@ const pt: Dictionary = {
       ask_always: { label: "Pedir para tudo", description: "Cada ação no computador espera pelo teu OK." },
       ask_sensitive: { label: "Pedir para ações de risco", description: "Compras, envios, publicações, apagar… esperam pelo teu OK." },
       autonomous: { label: "Autónomo", description: "Age sem perguntar. Usa só em agentes em que confias." },
+    },
+    research: {
+      title: "Internet",
+      label: "Pesquisar na internet",
+      description: "Procura preços, datas, locais e contactos no browser em vez de adivinhar. Usa o computador e um pouco mais de tokens.",
     },
     rules: { title: "Permitido sempre", empty: "Ainda nada. Escolhe “Permitir sempre” numa aprovação para aparecer aqui.", remove: "Remover" },
     editTitle: "Editar Botling",

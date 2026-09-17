@@ -14,6 +14,7 @@ const fields = {
   model: z.string().trim().min(3).max(200),
   appearance: appearanceSchema,
   autonomy: z.enum(["ask_always", "ask_sensitive", "autonomous"]),
+  webResearch: z.boolean(),
 };
 
 export const agentInputSchema = z.object({
@@ -21,6 +22,7 @@ export const agentInputSchema = z.object({
   role: fields.role.default(""),
   prompt: fields.prompt.default(""),
   autonomy: fields.autonomy.default("ask_sensitive"),
+  webResearch: fields.webResearch.default(true),
 });
 
 /**

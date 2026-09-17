@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
-import { ChevronLeft, Loader2, Shuffle } from "lucide-react";
+import { ChevronLeft, Globe, Loader2, Shuffle } from "lucide-react";
 import { AgentGenerator } from "./agent-generator";
 import { ApprovalRules, AutonomyPicker } from "./autonomy-section";
 import { ModelPicker } from "./model-picker";
@@ -56,6 +56,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
   const [prompt, setPrompt] = useState(agent?.prompt ?? "");
   const [model, setModel] = useState(agent?.model ?? defaultModel);
   const [autonomy, setAutonomy] = useState<Autonomy>(agent?.autonomy ?? "ask_sensitive");
+  const [webResearch, setWebResearch] = useState(agent?.webResearch ?? true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<keyof typeof t.agent.errors | null>(null);
 
@@ -71,7 +72,7 @@ export function AgentForm({ agent }: { agent?: Agent }) {
       const res = await fetch(editing ? `/api/agents/${agent.id}` : "/api/agents", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, role, prompt, model, appearance, autonomy }),
+        body: JSON.stringify({ name, role, prompt, model, appearance, autonomy, webResearch }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -270,6 +271,31 @@ export function AgentForm({ agent }: { agent?: Agent }) {
             <Section title={t.agent.model}>
               <ModelPicker value={model} onChange={setModel} />
               <p className="text-xs text-muted">{t.agent.modelHint}</p>
+            </Section>
+
+            <Section title={t.agent.research.title}>
+              <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3.5">
+                <Globe className="size-5 shrink-0 text-accent" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{t.agent.research.label}</p>
+                  <p className="text-xs leading-snug text-muted">{t.agent.research.description}</p>
+                </div>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={webResearch}
+                  aria-label={t.agent.research.label}
+                  onClick={() => setWebResearch((v) => !v)}
+                  className={cn("relative h-6 w-11 shrink-0 rounded-full transition-colors", webResearch ? "bg-accent" : "bg-surface-2")}
+                >
+                  <span
+                    className={cn(
+                      "absolute top-0.5 size-5 rounded-full bg-elevated shadow-soft transition-all",
+                      webResearch ? "left-[22px]" : "left-0.5",
+                    )}
+                  />
+                </button>
+              </div>
             </Section>
 
             <Section title={t.agent.autonomy.title}>

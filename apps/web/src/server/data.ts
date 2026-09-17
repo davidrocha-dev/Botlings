@@ -24,6 +24,7 @@ export function toAgentDto(row: AgentRow, usage?: { cost: number; tokens: number
     appearance: row.appearance,
     isOrchestrator: row.isOrchestrator,
     autonomy: row.autonomy,
+    webResearch: row.webResearch,
     status: "idle",
     spendTodayUsd: usage?.cost ?? 0,
     tokensToday: usage?.tokens ?? 0,
@@ -151,6 +152,7 @@ export type NewAgentInput = {
   model: string;
   appearance: BotlingAppearance;
   autonomy?: "ask_always" | "ask_sensitive" | "autonomous";
+  webResearch?: boolean;
   isOrchestrator?: boolean;
   greeting?: string;
 };
@@ -174,6 +176,7 @@ export async function createAgent(ownerId: string, input: NewAgentInput) {
         model: input.model,
         appearance: input.appearance,
         autonomy: input.autonomy ?? "ask_sensitive",
+        webResearch: input.webResearch ?? true,
         isOrchestrator: input.isOrchestrator ?? false,
       })
       .returning();
