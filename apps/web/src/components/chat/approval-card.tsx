@@ -26,6 +26,8 @@ export function ApprovalCard({ message }: { message: Message }) {
   const status: ApprovalStatus = meta.approvalStatus ?? "pending";
   const agent = message.author.type === "agent" ? getAgent(message.author.agentId) : undefined;
   const category = meta.approvalCategory ?? "";
+  // A request for help at the screen is not a permission: the user does the step, then says it is done.
+  const screenHelp = category === "screen_help";
   const categoryLabel = category.startsWith("tool:")
     ? (t.tools[category.slice(5) as keyof typeof t.tools] ?? category.slice(5))
     : (t.approvals.categories[category as keyof typeof t.approvals.categories] ?? category);
@@ -73,8 +75,10 @@ export function ApprovalCard({ message }: { message: Message }) {
           {status === "approved" ? <ShieldCheck className="size-4" /> : <ShieldAlert className="size-4" />}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{f(t.approvals.title, { name: agent?.name ?? "Botling" })}</p>
-          <p className="text-xs text-muted">{categoryLabel}</p>
+          <p className="text-sm font-semibold">
+            {f(screenHelp ? t.approvals.screenTitle : t.approvals.title, { name: agent?.name ?? "Botling" })}
+          </p>
+          <p className="text-xs text-muted">{screenHelp ? t.approvals.screenHint : categoryLabel}</p>
           <span className={cn("mt-1 inline-flex rounded-full px-2 py-0.5 text-[11px] font-medium", STATUS_STYLE[status])}>
             {status === "approved" && meta.approvalAlwaysAllowed ? t.approvals.alwaysAllowed : t.approvals.status[status]}
           </span>
@@ -97,7 +101,7 @@ export function ApprovalCard({ message }: { message: Message }) {
               className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full bg-accent text-sm font-medium text-accent-contrast hover:bg-accent-hover disabled:opacity-60"
             >
               {pending === "approve" ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
-              {t.approvals.allowOnce}
+              {screenHelp ? t.approvals.screenDone : t.approvals.allowOnce}
             </button>
             <button
               type="button"
@@ -106,11 +110,13 @@ export function ApprovalCard({ message }: { message: Message }) {
               className="inline-flex h-9 flex-1 items-center justify-center gap-1.5 rounded-full border border-border-strong text-sm font-medium hover:bg-surface-2 disabled:opacity-60"
             >
               {pending === "deny" ? <Loader2 className="size-4 animate-spin" /> : <X className="size-4" />}
-              {t.approvals.deny}
+              {screenHelp ? t.approvals.screenSkip : t.approvals.deny}
             </button>
           </div>
+          {/* "Always allow" makes no sense for a step only the user can do. */}
           <button
             type="button"
+            hidden={screenHelp}
             onClick={() => decide("always")}
             disabled={pending !== null}
             className="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-full text-xs font-medium text-muted hover:bg-surface-2 hover:text-text disabled:opacity-60"

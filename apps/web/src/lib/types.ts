@@ -81,6 +81,8 @@ export type Conversation = {
   lastMessage: Message | null;
   /** Groups only. */
   description?: string;
+  /** Groups: the owner's playbooks, one per line, that the moderator follows when one matches. */
+  flows?: string;
   discussionMode?: "discussion" | "mentions";
   maxTurns?: number;
   maxCostUsd?: number;

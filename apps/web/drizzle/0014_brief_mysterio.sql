@@ -1,0 +1,1 @@
+ALTER TABLE "conversations" ADD COLUMN "flows" text DEFAULT '' NOT NULL;

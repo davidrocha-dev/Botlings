@@ -44,6 +44,12 @@ export const COMPUTER_TOOLS: ToolDefinition[] = [
     { ref: { type: "number" }, text: { type: "string" }, submit: { type: "boolean", description: "Press Enter after typing" } },
     ["ref", "text"],
   ),
+  tool(
+    "ask_for_screen",
+    "Ask the user to take over your screen for one step you cannot do yourself: a CAPTCHA or \"prove you are human\" wall, a login, or anything needing a password or payment details. Your browser is brought up for them and you wait. When they are done you get a fresh snapshot and carry on from there — so use this instead of giving up on a page or hunting for another source.",
+    { reason: { type: "string", description: "What the user has to do, in one line, in their language" } },
+    ["reason"],
+  ),
 ];
 
 export const COMPUTER_TOOL_NAMES = new Set(COMPUTER_TOOLS.map((t) => t.function.name));
@@ -125,4 +131,13 @@ async function runTool(agentId: string, name: string, args: Record<string, unkno
     default:
       throw new Error(`Unknown tool ${name}`);
   }
+}
+
+/** Brings the agent's browser up on screen for the user, then reads the page they left behind. */
+export async function showBrowserToUser(agentId: string) {
+  await callRunner(agentId, "/browser/show", {});
+}
+
+export async function snapshotAfterUser(agentId: string) {
+  return formatSnapshot(await callRunner<Snapshot>(agentId, "/browser/snapshot", {}));
 }

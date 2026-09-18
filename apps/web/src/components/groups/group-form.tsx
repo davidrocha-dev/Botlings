@@ -74,6 +74,7 @@ export function GroupForm({ group }: { group?: Conversation }) {
 
   const [title, setTitle] = useState(group?.title ?? "");
   const [description, setDescription] = useState(group?.description ?? "");
+  const [flows, setFlows] = useState(group?.flows ?? "");
   const [memberIds, setMemberIds] = useState<string[]>([]);
   const [mode, setMode] = useState<"discussion" | "mentions">(group?.discussionMode ?? "discussion");
   const [maxTurns, setMaxTurns] = useState(group?.maxTurns ?? 6);
@@ -90,7 +91,7 @@ export function GroupForm({ group }: { group?: Conversation }) {
     setSubmitting(true);
     setError(null);
     try {
-      const settings = { title, description, discussionMode: mode, maxTurns, maxCostUsd };
+      const settings = { title, description, flows, discussionMode: mode, maxTurns, maxCostUsd };
       const res = await fetch(editing ? `/api/groups/${group.id}` : "/api/groups", {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -153,6 +154,17 @@ export function GroupForm({ group }: { group?: Conversation }) {
             />
           </Section>
 
+          <Section title={t.groups.flows} hint={t.groups.flowsHint}>
+            <textarea
+              value={flows}
+              onChange={(e) => setFlows(e.target.value)}
+              placeholder={t.groups.flowsPlaceholder}
+              maxLength={1500}
+              rows={4}
+              className={cn(fieldClass, "resize-y")}
+            />
+          </Section>
+
           {!editing && (
             <Section title={t.groups.members} hint={memberIds.length ? f(t.groups.selected, { count: memberIds.length }) : t.groups.membersHint}>
               <AgentPicker selected={memberIds} onToggle={toggle} />
@@ -202,7 +214,8 @@ export function GroupForm({ group }: { group?: Conversation }) {
                     type="number"
                     min={0.001}
                     max={2}
-                    step={0.01}
+                    // "any": with a 0.001 minimum, a 0.01 step would make the browser reject round cents like 0.05.
+                    step="any"
                     value={maxCostUsd}
                     onChange={(e) => setMaxCostUsd(Math.max(0.001, Math.min(2, Number(e.target.value) || 0.001)))}
                     className={fieldClass}

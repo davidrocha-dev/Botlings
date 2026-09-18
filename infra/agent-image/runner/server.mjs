@@ -119,9 +119,28 @@ async function getPage() {
   return page;
 }
 
+/**
+ * Waits for a page to finish drawing itself. "domcontentloaded" only means the HTML shell arrived:
+ * on a site that renders with scripts (flight and price comparators, most dashboards) the results
+ * appear seconds later, so a snapshot taken at that moment shows an empty page and the agent concludes
+ * the site is broken. Network idle usually marks the end, but ads and trackers keep some pages busy
+ * forever, so the text is also polled until it stops growing.
+ */
+async function settle(page) {
+  await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => {});
+  await page.waitForLoadState("networkidle", { timeout: 8_000 }).catch(() => {});
+  let previous = -1;
+  for (let i = 0; i < 8; i++) {
+    const length = await page.evaluate(() => (document.body?.innerText ?? "").length).catch(() => previous);
+    if (length === previous && length > 0) return;
+    previous = length;
+    await page.waitForTimeout(500);
+  }
+}
+
 /** Numbers visible interactive elements and returns a compact text view of the page. */
 async function snapshot(page) {
-  await page.waitForLoadState("domcontentloaded", { timeout: 15_000 }).catch(() => {});
+  await settle(page);
   const data = await page.evaluate(() => {
     const selector = "a[href], button, input:not([type=hidden]), textarea, select, [role=button], [role=link], [contenteditable=true]";
     const visible = (el) => {
@@ -154,11 +173,16 @@ async function snapshot(page) {
     const text = (document.body?.innerText ?? "").replace(/\n{3,}/g, "\n\n").trim();
     return { title: document.title, elements, text };
   });
+  // A page that draws nothing even after settling is usually blocking automated browsers: say so, so the
+  // agent reports it and moves on instead of spending the rest of its turn reloading the same wall.
+  const blocked = !data.text && !data.elements.length;
   return {
     url: page.url(),
     title: data.title,
     elements: data.elements.join("\n"),
-    text: truncate(data.text, 8_000),
+    text: blocked
+      ? "(this page returned no text and no elements — it is most likely blocking automated browsers: ask the user to take the screen instead of reloading it)"
+      : truncate(data.text, 8_000),
   };
 }
 

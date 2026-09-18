@@ -16,7 +16,7 @@ import { isAlwaysAllowed, requestApproval } from "@/server/approvals/approvals";
 import { classifyAction, type ElementInfo } from "@/server/approvals/classify";
 import { secretNamesForAgent } from "@/server/secrets/secrets";
 import { BudgetExceededError, assertWithinBudget } from "@/server/usage/usage";
-import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool } from "@/server/computers/tools";
+import { COMPUTER_TOOLS, COMPUTER_TOOL_NAMES, describeToolCall, executeComputerTool, showBrowserToUser, snapshotAfterUser } from "@/server/computers/tools";
 import { MEMORY_TOOLS, MEMORY_TOOL_NAMES, executeMemoryTool, listMemories, memorySection, updateConversationSummary, type MemoryRow } from "./memory";
 import { PROPOSAL_GUIDE, PROPOSE_INSTRUCTIONS_TOOL, createProposal } from "./proposals";
 import { isStopped } from "./generations";
@@ -149,13 +149,13 @@ const DELEGATION_GUIDE =
   "Delegation: handle simple things yourself (questions, quick answers, small tasks you can do well). Use delegate_task only when a crew member is clearly better suited for the work, e.g. it matches their role or needs their computer. When you delegate, tell the user briefly who is working on it; the result will come back to you and you will then summarise it.";
 
 const RESEARCH_GUIDE =
-  "Research: always search with the full date including the year (models get the current year wrong). Never invent facts that can be checked and change over time — prices (flights, hotels, fees, ad costs), dates and deadlines, venues, contacts, rules, statistics. Look them up with your browser first (a search engine, then the most reliable pages), give the key numbers with where they came from, and say when you could only estimate. Don't research what the user already told you or what is general knowledge. In group discussions you may research before your turn; keep the reply itself short. Show the arithmetic behind any total (fee minus costs, per person, margins) and sanity-check the result before writing it: a negative or wildly large number means you made a mistake. Never put a price, availability or deadline in a table or summary without having checked it in this conversation — if you did not check it, write \"estimate\" next to the number.";
+  "Research: always search with the full date including the year (models get the current year wrong). Never invent facts that can be checked and change over time — prices (flights, hotels, fees, ad costs), dates and deadlines, venues, contacts, rules, statistics. Look them up with your browser first — search on duckduckgo.com (Google serves us CAPTCHAs, and you must never try to solve one), then open the most reliable pages — give the key numbers with where they came from, and say when you could only estimate. When a search is blocked or you can't reach a source, say plainly that you couldn't check it and give no number at all: a made-up price is worse than a gap, and two members guessing produce two different numbers that contradict each other in front of the user. Before you search, re-read what you remember and what the user said: a saved fact (their home airport, their usual city, agreed rates) beats any assumption, and earlier messages in the conversation may repeat an assumption that contradicts it — follow the saved fact and say you are doing so. A site that renders its results with scripts (flight and price comparators above all) rarely works through a hand-built URL with query parameters: open its home page and use the numbered elements from the snapshot, When a site answers with a CAPTCHA, a \"prove you are human\" wall or a login, don't try to get around it and don't go hunting for another source: call ask_for_screen, the user clears it for you, and you carry on from the page they leave. Keep that for walls only — if a page is merely slow, take another snapshot, and if two honest attempts get you nowhere, say so and leave it rather than burning the turn on a third. Don't research what the user already told you or what is general knowledge. In group discussions you may research before your turn; keep the reply itself short. Show the arithmetic behind any total (fee minus costs, per person, margins) and sanity-check the result before writing it: a negative or wildly large number means you made a mistake. Never put a price, availability or deadline in a table or summary without having checked it in this conversation — if you did not check it, write \"estimate\" next to the number.";
 
 const NO_RESEARCH_GUIDE =
   "You don't browse the internet. When something depends on current facts (prices, dates, contacts…), give a clearly labelled estimate and say the user can check it.";
 
 const SAFETY_GUIDE =
-  "Risky actions on your computer (purchases, sending or publishing, deleting, pushing code, accepting terms…) automatically pause for the user's approval; just attempt them normally when the task requires it. If an action is denied, do not retry it or find a workaround — tell the user. You can never type passwords, codes or card details: ask the user to take control of the screen for those steps.";
+  "Risky actions on your computer (purchases, sending or publishing, deleting, pushing code, accepting terms…) automatically pause for the user's approval; just attempt them normally when the task requires it. If an action is denied, do not retry it or find a workaround — tell the user. You can never type passwords, codes or card details, and you must never try to solve a CAPTCHA: call ask_for_screen for those steps and the user does them on your screen.";
 
 /** Long date in the server's timezone, so agents never assume the year from their training data. */
 function today() {
@@ -218,7 +218,7 @@ ${opts.conversationSummary}`,
         `You are in a group chat with the user and these Botlings: ${opts.memberNames.join(", ")}. Messages from other Botlings are prefixed with their name in brackets (that label is added by the app: never start your own message with your name or any label). Only speak for yourself; never write lines for the others.`,
         opts.groupDescription && `What this group is for: ${opts.groupDescription}`,
         opts.discussion &&
-          "This is a moderated discussion: a moderator gives the floor to one Botling at a time. When it is your turn, add only what is new from your own area of expertise, in a few sentences. Don't open by agreeing with or recapping the others (no \"I fully agree with…\"), and don't repeat questions already asked to the user. You may question or correct a teammate by name. Never research or work in a teammate area: name them instead. Answer only your own part of the question and leave the rest to the other members of the panel. If you have nothing new to add, say so in one short sentence. Never declare a decision as taken or promise to do things outside your area: recommend, and let the user decide. When the user is weighing a decision, end your reply with one short line starting \"Voto:\" (or \"Vote:\" in English) — accept / negotiate / decline / need more information — plus a handful of words saying why; the orchestrator counts these. Write only in the conversation's language — never mix in words from other languages or scripts.",
+          "This is a moderated discussion: the orchestrator opens the round by saying which part each Botling covers, then gives the floor to one of them at a time. The part you were given is the whole of your turn — someone else is already on the rest, so never look up, work on, price or give your opinion on their part, not even to check their numbers, and never hand out work to them: the orchestrator already did that and repeating it only wastes a turn. When it is your turn, add only what is new from your own area of expertise, in a few sentences. Don't open by agreeing with or recapping the others (no \"I fully agree with…\"), and don't repeat questions already asked to the user. You may question or correct a teammate by name. Never research or work in a teammate area: name them instead. Answer only your own part of the question and leave the rest to the other members of the panel. If you have nothing new to add, say so in one short sentence. Never declare a decision as taken or promise to do things outside your area: recommend, and let the user decide. When the user is weighing a decision, end your reply with one short line starting \"Voto:\" (or \"Vote:\" in English) — accept / negotiate / decline / need more information — plus a handful of words saying why; the orchestrator counts these. Write only in the conversation's language — never mix in words from other languages or scripts.",
       ]
         .filter(Boolean)
         .join("\n"),
@@ -473,7 +473,29 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
           args = JSON.parse(call.function.arguments || "{}");
         } catch {}
 
-        if (COMPUTER_TOOL_NAMES.has(call.function.name) && computerReady) {
+        if (call.function.name === "ask_for_screen" && computerReady) {
+          // A wall the agent must not climb itself (CAPTCHA, login, payment): the browser comes up and the
+          // turn waits for the user to do that one step, then carries on from the page they leave behind.
+          const reason = String(args.reason ?? "").trim() || "Take over the screen for one step.";
+          await showBrowserToUser(agent.id).catch(() => {});
+          emit({ type: "computer", agentId: agent.id });
+          const status = await requestApproval({
+            ownerId: agent.ownerId,
+            agentId: agent.id,
+            conversationId,
+            tool: "ask_for_screen",
+            category: "screen_help",
+            detail: reason,
+            emit,
+            signal,
+          });
+          result =
+            status === "approved"
+              ? `The user took over the screen and says it is done. The page now:\n${await snapshotAfterUser(agent.id).catch((error) => `(could not read the page: ${error instanceof Error ? error.message : String(error)})`)}`
+              : status === "denied"
+                ? "The user did not take over the screen. Do not ask again this turn: say what you could not check and finish your turn."
+                : "Nobody answered in time. Say what you could not check and finish your turn.";
+        } else if (COMPUTER_TOOL_NAMES.has(call.function.name) && computerReady) {
           const gate = await gateComputerAction({ agent, conversationId, tool: call.function.name, args, emit, signal });
           if (gate.allowed) {
             emit({ type: "typing", agentId: agent.id });
@@ -530,6 +552,28 @@ export async function runAgentTurn(opts: TurnOptions): Promise<TurnResult> {
         }
         messages.push({ role: "tool", tool_call_id: call.id, content: result });
       }
+    }
+
+    // Out of tool rounds with nothing said yet (a site that never loads eats them fast): one last call
+    // without tools, so the turn ends in an answer instead of silence — in a group, that silence is a
+    // member who researched all round and then cast no vote.
+    if (!content.trim() && tools.length) {
+      messages.push({
+        role: "user",
+        content:
+          "You are out of steps on your computer. Answer now with what you already have: say plainly what you could not check, never invent it, and finish your turn as you normally would.",
+      });
+      for await (const event of streamChat({ model: modelUsed, messages, signal })) {
+        if (event.type === "delta") {
+          content += event.text;
+          emit({ type: "delta", messageId: draftId, agentId: agent.id, text: event.text });
+        } else if (event.type === "usage") {
+          usage.prompt_tokens += event.usage.prompt_tokens ?? 0;
+          usage.completion_tokens += event.usage.completion_tokens ?? 0;
+          usage.cost = (usage.cost ?? 0) + (event.usage.cost ?? 0);
+        }
+      }
+      if (conversation.type === "group") content = tidyGroupReply(content, agent.name, [...conversation.names.values()]);
     }
 
     fullContent += content.trim();

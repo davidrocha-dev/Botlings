@@ -103,6 +103,8 @@ export const conversations = pgTable(
     contextStartedAt: timestamp("context_started_at", { withTimezone: true }),
     /** Groups: what the group is for (shown to its agents and the moderator). */
     description: text("description").notNull().default(""),
+    /** Groups: the owner's playbooks, one per line ("Booking: Tempo → Gig → Clause"), followed when one matches. */
+    flows: text("flows").notNull().default(""),
     /** Groups: "discussion" lets the moderator pass the word between agents; "mentions" gets one reply. */
     discussionMode: text("discussion_mode", { enum: ["discussion", "mentions"] }).notNull().default("discussion"),
     /** Groups: most agent replies per user message. */
@@ -165,6 +167,8 @@ export type MessageMetadata = {
   memberEvent?: "joined" | "left";
   memberAgentId?: string;
   discussionStop?: "turns" | "cost";
+  /** The chair's opening message: who covers what this round, written from the panel, not by a model. */
+  roundPlan?: boolean;
   /** Slash command replies (kind "command"). */
   command?: string;
   pendingApprovals?: { id: string; agentName: string; detail: string }[];

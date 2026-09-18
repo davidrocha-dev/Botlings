@@ -11,6 +11,7 @@ export const GROUP_LIMITS = { minMembers: 1, maxMembers: 12, maxTurns: 20, maxCo
 export const groupInputSchema = z.object({
   title: z.string().trim().min(1).max(60),
   description: z.string().trim().max(600).default(""),
+  flows: z.string().trim().max(1500).default(""),
   memberIds: z.array(z.uuid()).min(GROUP_LIMITS.minMembers).max(GROUP_LIMITS.maxMembers),
   discussionMode: z.enum(["discussion", "mentions"]).default("discussion"),
   maxTurns: z.number().int().min(1).max(GROUP_LIMITS.maxTurns).default(6),
@@ -21,6 +22,7 @@ export const groupInputSchema = z.object({
 export const groupPatchSchema = z.object({
   title: z.string().trim().min(1).max(60).optional(),
   description: z.string().trim().max(600).optional(),
+  flows: z.string().trim().max(1500).optional(),
   discussionMode: z.enum(["discussion", "mentions"]).optional(),
   maxTurns: z.number().int().min(1).max(GROUP_LIMITS.maxTurns).optional(),
   maxCostUsd: z.number().min(0.001).max(GROUP_LIMITS.maxCostUsd).optional(),
@@ -74,6 +76,7 @@ export async function getGroupDto(ownerId: string, groupId: string): Promise<Con
     unread: 0,
     lastMessage: last ? toMessageDto(last) : null,
     description: group.description,
+    flows: group.flows,
     discussionMode: group.discussionMode,
     maxTurns: group.maxTurns,
     maxCostUsd: group.maxCostUsd,
@@ -112,6 +115,7 @@ export async function createGroup(ownerId: string, input: z.infer<typeof groupIn
       type: "group",
       title: input.title,
       description: input.description,
+      flows: input.flows,
       discussionMode: input.discussionMode,
       maxTurns: input.maxTurns,
       maxCostUsd: input.maxCostUsd,

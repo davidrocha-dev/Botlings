@@ -17,9 +17,11 @@ export function Sidebar() {
   const { conversations, getAgent, typing } = useStore();
   const params = useParams<{ id?: string }>();
   const [query, setQuery] = useState("");
+  const [tab, setTab] = useState<"all" | "groups">("all");
 
   const rows = useMemo(() => {
     return conversations
+      .filter((conversation) => tab === "all" || conversation.type === "group")
       .map((conversation) => {
         const title =
           conversation.type === "group"
@@ -34,7 +36,7 @@ export function Sidebar() {
         if (a.conversation.pinned !== b.conversation.pinned) return a.conversation.pinned ? -1 : 1;
         return (b.last?.createdAt ?? 0) - (a.last?.createdAt ?? 0);
       });
-  }, [conversations, getAgent, query]);
+  }, [conversations, getAgent, query, tab]);
 
   return (
     <div className="flex h-full flex-col">
@@ -69,6 +71,21 @@ export function Sidebar() {
             className="w-full bg-transparent text-sm text-text outline-none placeholder:text-subtle"
           />
         </label>
+        <div className="mb-2 flex gap-1 rounded-xl bg-surface-2 p-1">
+          {(["all", "groups"] as const).map((value) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setTab(value)}
+              className={cn(
+                "flex-1 rounded-lg py-1.5 text-sm font-medium transition-colors",
+                tab === value ? "bg-surface text-text shadow-soft" : "text-muted hover:text-text",
+              )}
+            >
+              {value === "all" ? t.nav.allTab : t.nav.groupsTab}
+            </button>
+          ))}
+        </div>
       </header>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
