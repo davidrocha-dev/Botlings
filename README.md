@@ -50,7 +50,6 @@ pnpm infra:up
 apps/web          Next.js PWA (UI, API routes)
 infra/agent-image Docker image for each agent's computer
 packages/       Shared packages (coming: db, agent-runner, orchestrator)
-docs/PROJETO.md Full product spec and roadmap
 ```
 
 ## Features
@@ -68,7 +67,3 @@ docs/PROJETO.md Full product spec and roadmap
 ## Stack
 
 Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · Drizzle ORM · PostgreSQL / PGlite · Redis · Docker · OpenRouter · pnpm monorepo
-
-## Roadmap
-
-See [docs/PROJETO.md](docs/PROJETO.md) (in Portuguese) for the full spec and roadmap.
