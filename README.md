@@ -2,7 +2,7 @@
 
 Your crew of AI agents, each with its own computer. Self-hosted, low cost, powered by OpenRouter.
 
-> Private project — all rights reserved.
+> **Status: work in progress.** Personal project, not production-ready.
 
 ## Requirements
 
@@ -53,7 +53,22 @@ packages/       Shared packages (coming: db, agent-runner, orchestrator)
 docs/PROJETO.md Full product spec and roadmap
 ```
 
-## Status
+## Features
 
-Phase 1 — owner auth, license scaffolding, database, real streaming chat via OpenRouter with cost tracking and explicit model switching (`/model <id>` or asking the agent).
-See [docs/PROJETO.md](docs/PROJETO.md) for the roadmap.
+- **Agent computers**: each agent runs in its own Docker container with a live screen, files and terminal, behind a LAN firewall.
+- **Streaming chat** with any OpenRouter model, cost tracking, usage dashboard and per-agent budgets.
+- **Orchestrator** that delegates tasks to the rest of the crew, with live task cards and summaries.
+- **Group discussions** with a moderator, short panels per round and votes.
+- **Approvals**: a server-enforced gate before risky agent actions.
+- **Secrets** stored per agent, with the runner API locked against in-container callers.
+- **Memory** and conversation summaries per agent.
+- **Scheduled routines**, Web Push notifications and a Telegram bot (chat, approvals, slash commands).
+- **Per-agent web research** so agents look facts up instead of guessing.
+
+## Stack
+
+Next.js 16 (App Router) · React 19 · TypeScript · Tailwind v4 · Drizzle ORM · PostgreSQL / PGlite · Redis · Docker · OpenRouter · pnpm monorepo
+
+## Roadmap
+
+See [docs/PROJETO.md](docs/PROJETO.md) (in Portuguese) for the full spec and roadmap.
